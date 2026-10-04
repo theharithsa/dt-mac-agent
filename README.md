@@ -414,10 +414,14 @@ Endpoints are derived from `DT_ENV_URL` and the token type:
 
 ## Troubleshooting
 
+See **[troubleshooting.md](troubleshooting.md)** for the full guide: health check, token scopes and rotation,
+connectivity and proxies, missing dimensions, spool, log shipping, auto-update, installer issues and diagnostics.
+
 | Symptom | Fix |
 |---|---|
-| `HTTP 401` | Token invalid or expired. Re-run the installer with `DT_TOKEN=<new>` |
-| `HTTP 403 ... missing required permission` | Add the named permission to the token (see the token table) |
+| `HTTP 401` | Token invalid or expired. See [Updating or rotating the token](troubleshooting.md#updating-or-rotating-the-token) |
+| `HTTP 403 ... missing required permission` | Add the named scope to the token (see the token table) |
+| Need to add a scope or change the token | `update` keeps the token. See [Updating or rotating the token](troubleshooting.md#updating-or-rotating-the-token) |
 | `HTTP 400` | Some lines were rejected. Details are in `dtmacctl logs ingest` |
 | No data after install | `sudo dtmacctl status`, then `sudo dtmacctl send-test` |
 | Agent keeps restarting | `dtmacctl logs agent` and `/Library/Logs/dt-mac-agent/agent.stderr.log` |
