@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] - 2026-10-05
+
+### Added
+
+- Metric definitions now declare their dimensions, with display names (e.g. `process.executable.name` → "Process"),
+  through the Settings API (`builtin:metric.metadata`). Dimensions appear in the metric definition and in
+  Notebook/Data Explorer split pickers. The dimension catalog lives in `lib/dimensions.tsv`.
+- Needs `settings.write` (API token) or `settings:objects:write` (platform token). Without it, the agent logs a
+  warning and falls back to metadata lines (name, description and unit only).
+
 ## [0.1.1] - 2026-10-05
 
 ### Added
@@ -70,6 +80,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Log rotation via `newsyslog`.
 - CI (shellcheck + macOS dry-run) and tag-based GitHub release workflow.
 
+[0.1.2]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.1.2
 [0.1.1]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.1.1
 [0.1.0]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.1.0
 [0.0.2]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.0.2

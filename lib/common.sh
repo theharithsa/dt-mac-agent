@@ -77,6 +77,28 @@ resolve_ingest() {
   esac
   INGEST_URL="${DT_INGEST_URL:-$api_base/v2/metrics/ingest}"
   LOGS_URL="${DT_LOGS_URL:-$api_base/v2/logs/ingest}"
+  SETTINGS_URL="${DT_SETTINGS_URL:-$api_base/v2/settings/objects}"
+}
+
+# Builds builtin:metric.metadata settings objects (name, description, unit and dimensions) for every metric.
+build_metric_settings() {
+  awk -F "$TAB" -v p="$METRIC_PREFIX" -v df="$DTMA_HOME/lib/dimensions.tsv" '
+    function j(s) { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); return "\"" s "\"" }
+    BEGIN {
+      while ((getline l < df) > 0) {
+        if (l ~ /^#/ || l == "") continue
+        split(l, d, "\t"); nd++; dk[nd] = d[1]; dn[nd] = d[2]; dr[nd] = d[3]
+      }
+      printf "["
+    }
+    !/^#/ && NF >= 5 {
+      dims = ""
+      for (i = 1; i <= nd; i++)
+        if ($1 ~ dr[i]) dims = dims (dims == "" ? "" : ",") "{\"key\":" j(dk[i]) ",\"displayName\":" j(dn[i]) "}"
+      printf "%s{\"schemaId\":\"builtin:metric.metadata\",\"scope\":%s,\"value\":{\"displayName\":%s,\"description\":%s,\"unit\":%s,\"dimensions\":[%s],\"tags\":[\"dt-mac-agent\"]}}", \
+        (n++ ? "," : ""), j("metric-" p "." $1), j($4), j($5), j($3), dims
+    }
+    END { printf "]\n" }' "$DTMA_HOME/lib/metrics.tsv"
 }
 
 init_dirs() {
@@ -148,6 +170,17 @@ send_metadata() {
   case "$last" in
     "$DTMA_VERSION $METRIC_PREFIX "*) [ $((now - ${last##* })) -lt 86400 ] && return 0 ;;
   esac
+
+  # Preferred: Settings API, which also declares the dimensions shown in metric definitions.
+  build_metric_settings >"$WORK_DIR/metadata.json"
+  http_post "$WORK_DIR/metadata.json" "$SETTINGS_URL" 'application/json; charset=utf-8'
+  if [ "$HTTP_CODE" = "200" ]; then
+    log INFO "metadata: declared name, description, unit and dimensions for all metrics via Settings API (HTTP 200)" "$INGEST_LOG"
+    echo "$DTMA_VERSION $METRIC_PREFIX $now" >"$stamp"
+    return 0
+  fi
+  log WARN "metadata: Settings API not usable (HTTP $HTTP_CODE); dimensions will not be listed in metric definitions. Grant the token settings.write (API token) or settings:objects:write (platform token). Falling back to metadata lines." "$INGEST_LOG"
+
   awk -F "$TAB" -v p="$METRIC_PREFIX" '
     !/^#/ && NF >= 5 {
       gsub(/"/, "", $4); gsub(/"/, "", $5)

@@ -19,10 +19,14 @@ Current version: see [VERSION](VERSION) · Changes: [CHANGELOG.md](CHANGELOG.md)
 
 ### 1. Create a Dynatrace token
 
-| Token type | Prefix | Metrics | Logs (optional) |
-|---|---|---|---|
-| Platform token (recommended) | `dt0s16.` | `openpipeline:metrics:ingest` | log ingest permission |
-| Classic API token | `dt0c01.` | `metrics.ingest` | `logs.ingest` |
+| Token type | Prefix | Metrics | Metric definitions (recommended) | Logs (optional) |
+|---|---|---|---|---|
+| Platform token (recommended) | `dt0s16.` | `openpipeline:metrics:ingest` | `settings:objects:write` | log ingest permission |
+| Classic API token | `dt0c01.` | `metrics.ingest` | `settings.write` | `logs.ingest` |
+
+The settings permission lets the agent declare each metric's display name, description, unit **and dimensions**.
+The dimensions then appear in the metric definition and in split/filter pickers. Without it, the agent falls back
+to metadata lines (name, description and unit only).
 
 If a permission is missing, Dynatrace answers with `HTTP 403 ... missing required permission: <name>`.
 The installer's connection test shows this error, and so does `dtmacctl logs agent`.
@@ -154,9 +158,10 @@ flowchart LR
 
 ## Metrics
 
-All metric keys start with `macos.` (configurable via `METRIC_PREFIX`). Display name, description and unit are sent
-to Dynatrace as metric metadata at start-up, after every upgrade and once a day. Metrics ending in `.count` are
-counters sent as per-interval deltas. Use `rate:` in DQL to get per-second values.
+All metric keys start with `macos.` (configurable via `METRIC_PREFIX`). Each metric's display name, description,
+unit and dimensions are declared in Dynatrace (Settings schema `builtin:metric.metadata`, tagged `dt-mac-agent`) at
+start-up, after every upgrade and once a day. Metrics ending in `.count` are counters sent as per-interval deltas.
+Use `rate:` in DQL to get per-second values. Dimension display names come from [lib/dimensions.tsv](lib/dimensions.tsv).
 
 ### Dimensions
 

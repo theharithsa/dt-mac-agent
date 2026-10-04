@@ -1,0 +1,17 @@
+# Dimension catalog: key <TAB> display name <TAB> regex of metric keys (without prefix) that carry it.
+# Declared in each metric's metadata (Settings API, builtin:metric.metadata) so UIs offer them for split/filter.
+process.executable.name	Process	^process\.
+process.owner	Process owner	^process\.
+app.name	App	^(process|app)\.
+process.executable.path	Executable path	^process\.
+app.bundle.id	App bundle ID	^app\.
+app.type	App type	^app\.
+disk.mount	Mount point	^disk\.(total|used|free|usage|inodes\.)
+disk.device	Disk device	^disk\.
+network.interface	Network interface	^net\.(bytes|packets|errors)\.
+agent.version	Agent version	^agent\.heartbeat$
+host.name	Host	.
+host.arch	Architecture	.
+host.model	Hardware model	.
+os.type	OS type	.
+os.version	OS version	.
