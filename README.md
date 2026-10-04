@@ -77,7 +77,8 @@ The watchdog shows `not running` between its 60-second runs. That is expected.
 | `sudo dtmacctl start` | Enable and start agent + watchdog |
 | `sudo dtmacctl stop` | Stop both (stays stopped across reboots until `start`) |
 | `sudo dtmacctl restart` | Restart the agent |
-| `sudo dtmacctl logs [-f]` | Show / follow agent and watchdog logs |
+| `dtmacctl logs [agent\|ingest\|watchdog\|install] [-f]` | Show / follow logs (default: all) |
+| `dtmacctl payload` | Print the last metric batch sent to Dynatrace |
 | `dtmacctl test` | Collect once and print the metric lines, nothing is sent |
 | `sudo dtmacctl send-test` | Send one test metric to validate URL + token |
 | `sudo dtmacctl config` | Print config with the token masked |
@@ -119,7 +120,7 @@ flowchart LR
 | `/usr/local/dt-mac-agent/` | Program files |
 | `/etc/dt-mac-agent/config` | Configuration (see [etc/config.example](etc/config.example)) |
 | `/var/lib/dt-mac-agent/` | Heartbeat, counter state, spool |
-| `/var/log/dt-mac-agent/` | Logs (rotated by `newsyslog`, 1 MB × 3) |
+| `/Library/Logs/dt-mac-agent/` | Logs, see [Logs](#logs) |
 | `/Library/LaunchDaemons/com.theharithsa.dt-mac-agent*.plist` | launchd jobs |
 
 ---
@@ -268,9 +269,39 @@ Edit `/etc/dt-mac-agent/config`, then run `sudo dtmacctl restart`.
 | `INTERVAL` | `60` | Collection interval in seconds (min 10) |
 | `SPOOL_MAX_AGE_MIN` | `55` | Retry window for failed batches (Dynatrace rejects data > 1 h old) |
 | `SPOOL_MAX_FILES` | `120` | Max buffered batches |
+| `LOG_PAYLOADS` | `0` | `1` = append every full batch to `payloads.log` |
 
 Endpoint selection: platform tokens use `<DT_ENV_URL>/platform/classic/environment-api/v2/metrics/ingest`,
 classic API tokens use `https://<env-id>.live.dynatrace.com/api/v2/metrics/ingest`.
+
+---
+
+## Logs
+
+All logs are written to `/Library/Logs/dt-mac-agent/`. They also appear in **Console.app** under *Log Reports*,
+and `newsyslog` rotates them. Runtime logs never contain the token, so you can read them without `sudo`.
+
+| File | Contents |
+|---|---|
+| `ingest.log` | One line per batch sent to Dynatrace: lines, bytes, HTTP result, accepted/invalid, timings, spool size, per-category breakdown |
+| `last-payload.txt` | The most recent batch exactly as sent (`dtmacctl payload`) |
+| `payloads.log` | Every full batch, only when `LOG_PAYLOADS=1` |
+| `agent.log` | Agent lifecycle, warnings and errors (start/stop, ingest failures, collector errors) |
+| `watchdog.log` | Result of every watchdog check (each minute) and any restarts |
+| `install.log` | Full installer output (readable by admin users) |
+| `*.stdout.log` / `*.stderr.log` | Raw process output captured by launchd (normally empty) |
+
+Example `ingest.log` line:
+
+```text
+2026-10-05 10:31:02 +0530 [INFO] batch 371 lines (61234 B): ok 202, accepted=371 invalid=0, collect=2s send=0s, spool=0 | agent=6 app=174 apps=2 cpu=13 disk=26 memory=20 net=49 power=1 process=78 system=8
+```
+
+Example `watchdog.log` line:
+
+```text
+2026-10-05 10:31:30 +0530 [INFO] ok: agent running (pid 812), heartbeat 28s ago, restarts so far 0
+```
 
 ---
 
@@ -282,7 +313,7 @@ classic API tokens use `https://<env-id>.live.dynatrace.com/api/v2/metrics/inges
 | `HTTP 403 ... missing required permission` | Add the permission from the token table above |
 | `HTTP 400` | Some lines were rejected. Details are in `sudo dtmacctl logs` |
 | No data after install | `sudo dtmacctl status`, then `sudo dtmacctl send-test` |
-| Agent keeps restarting | `sudo dtmacctl logs` and `/var/log/dt-mac-agent/agent.stderr.log` |
+| Agent keeps restarting | `dtmacctl logs agent` and `/Library/Logs/dt-mac-agent/agent.stderr.log` |
 
 ## Uninstall
 

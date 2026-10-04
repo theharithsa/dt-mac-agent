@@ -19,7 +19,7 @@ done
 
 [ -L /usr/local/bin/dtmacctl ] && rm -f /usr/local/bin/dtmacctl
 rm -f /etc/newsyslog.d/dt-mac-agent.conf
-rm -rf /usr/local/dt-mac-agent /var/lib/dt-mac-agent /var/log/dt-mac-agent
+rm -rf /usr/local/dt-mac-agent /var/lib/dt-mac-agent /var/log/dt-mac-agent /Library/Logs/dt-mac-agent
 if [ "$KEEP_CONFIG" -eq 1 ]; then
   echo "kept /etc/dt-mac-agent/config"
 else

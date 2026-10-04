@@ -9,17 +9,23 @@ DTMA_WD_LABEL="com.theharithsa.dt-mac-agent.watchdog"
 DTMA_PLIST_DIR="/Library/LaunchDaemons"
 DTMA_CONFIG="${DTMA_CONFIG:-/etc/dt-mac-agent/config}"
 DTMA_STATE_DIR="${DTMA_STATE_DIR:-/var/lib/dt-mac-agent}"
-DTMA_LOG_DIR="${DTMA_LOG_DIR:-/var/log/dt-mac-agent}"
+DTMA_LOG_DIR="${DTMA_LOG_DIR:-/Library/Logs/dt-mac-agent}"
 DTMA_VERSION="$(cat "$DTMA_HOME/VERSION" 2>/dev/null || echo unknown)"
 TAB="$(printf '\t')"
 LOG_FILE="${LOG_FILE:-}"
+INGEST_LOG="${INGEST_LOG:-}"
 LAST_STATUS="none"
+SENT_OK=0
+SENT_INVALID=0
 
+# log LEVEL MESSAGE [FILE]; falls back to stderr when no log file is configured.
 log() {
-  local line
-  line="$(date -u +%Y-%m-%dT%H:%M:%SZ) [$1] $2"
-  if [ -n "$LOG_FILE" ] && [ -d "$(dirname "$LOG_FILE")" ]; then
-    printf '%s\n' "$line" >>"$LOG_FILE"
+  local file="${3:-$LOG_FILE}" line
+  line="$(date '+%Y-%m-%d %H:%M:%S %z') [$1] $2"
+  if [ -n "$file" ] && [ -d "$(dirname "$file")" ]; then
+    # Logs never contain the token, so they are world-readable for easy troubleshooting.
+    if [ ! -e "$file" ]; then : >"$file"; chmod 644 "$file"; fi
+    printf '%s\n' "$line" >>"$file"
   else
     printf '%s\n' "$line" >&2
   fi
@@ -31,6 +37,7 @@ load_config() {
   INTERVAL=60
   SPOOL_MAX_AGE_MIN=55
   SPOOL_MAX_FILES=120
+  LOG_PAYLOADS=0
   DT_ENV_URL=""
   DT_TOKEN=""
   DT_INGEST_URL=""
@@ -89,12 +96,17 @@ bump_count() {
 
 # Returns 0 when the batch is accepted (or permanently rejected), 1 when it should be retried.
 send_file() {
-  local file="$1" resp="$WORK_DIR/resp.txt" err="$WORK_DIR/curl.err" code
+  local file="$1" resp="$WORK_DIR/resp.txt" err="$WORK_DIR/curl.err" code ok inv
   # Header is passed via stdin config so the token never appears in the process list.
+  : >"$resp"
   code="$(printf 'header = "%s"\n' "$AUTH_HEADER" | curl -sS -K - -o "$resp" -w '%{http_code}' \
     --connect-timeout 10 --max-time 30 \
     -H 'Content-Type: text/plain; charset=utf-8' \
     --data-binary "@$file" "$INGEST_URL" 2>"$err")" || true
+  ok="$(sed -n 's/.*"linesOk": *\([0-9]*\).*/\1/p' "$resp" | head -n 1)"
+  inv="$(sed -n 's/.*"linesInvalid": *\([0-9]*\).*/\1/p' "$resp" | head -n 1)"
+  SENT_OK=$((SENT_OK + ${ok:-0}))
+  SENT_INVALID=$((SENT_INVALID + ${inv:-0}))
   case "$code" in
     200|202)
       LAST_STATUS="ok $code"
@@ -146,13 +158,14 @@ spool_file() {
 
 # Sends buffered batches oldest-first; stops at the first failure to preserve order.
 flush_spool() {
-  local f
+  local f n
   prune_spool
   for f in "$SPOOL_DIR"/*.txt; do
     [ -e "$f" ] || continue
+    n="$(wc -l <"$f" | tr -d ' ')"
     send_file "$f" || return 1
     rm -f "$f"
-    log INFO "re-sent spooled batch ${f##*/}"
+    log INFO "re-sent buffered batch ${f##*/} ($n lines): $LAST_STATUS" "$INGEST_LOG"
   done
   return 0
 }

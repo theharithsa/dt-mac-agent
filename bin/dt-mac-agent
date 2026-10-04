@@ -43,7 +43,10 @@ if [ "$DRY" -eq 1 ]; then
   trap 'rm -rf "$DTMA_STATE_DIR"' EXIT
 else
   resolve_ingest || exit 1
-  [ "$ONCE" -eq 1 ] || LOG_FILE="$DTMA_LOG_DIR/agent.log"
+  if [ "$ONCE" -eq 0 ]; then
+    LOG_FILE="$DTMA_LOG_DIR/agent.log"
+    INGEST_LOG="$DTMA_LOG_DIR/ingest.log"
+  fi
 fi
 init_dirs
 host_info
@@ -59,7 +62,7 @@ ensure_watchdog() {
 }
 
 run_cycle() {
-  local start records="$WORK_DIR/records.tsv" payload="$WORK_DIR/payload.txt" state="$DTMA_STATE_DIR/counters.tsv" lines
+  local start sent_at records="$WORK_DIR/records.tsv" payload="$WORK_DIR/payload.txt" state="$DTMA_STATE_DIR/counters.tsv" lines bytes breakdown level
   start="$(date +%s)"
   rm -f "$WORK_DIR"/*
   collect_all >"$records" 2>"$WORK_DIR/collect.err"
@@ -78,9 +81,22 @@ run_cycle() {
     cat "$payload"
     return 0
   fi
+  sent_at="$(date +%s)"
+  SENT_OK=0
+  SENT_INVALID=0
   send_payload "$payload"
   lines="$(wc -l <"$payload" | tr -d ' ')"
+  bytes="$(wc -c <"$payload" | tr -d ' ')"
+  breakdown="$(awk -F '[.,]' '{ c[$2]++ } END { for (k in c) printf "%s=%d\n", k, c[k] }' "$payload" | sort | tr '\n' ' ')"
+  case "$LAST_STATUS" in ok*) level=INFO ;; partial*) level=WARN ;; *) level=ERROR ;; esac
+  log "$level" "batch $lines lines (${bytes} B): $LAST_STATUS, accepted=$SENT_OK invalid=$SENT_INVALID, collect=$((sent_at - start))s send=$(($(date +%s) - sent_at))s, spool=$(spool_count) | ${breakdown% }" "$INGEST_LOG"
   printf '%s %s %s\n' "$(date +%s)" "$lines" "$LAST_STATUS" >"$DTMA_STATE_DIR/last_status"
+  if [ -n "$INGEST_LOG" ]; then
+    cp "$payload" "$DTMA_LOG_DIR/last-payload.txt" && chmod 644 "$DTMA_LOG_DIR/last-payload.txt"
+    if [ "$LOG_PAYLOADS" = "1" ]; then
+      { echo "# $(date '+%Y-%m-%d %H:%M:%S %z') $LAST_STATUS"; cat "$payload"; } >>"$DTMA_LOG_DIR/payloads.log"
+    fi
+  fi
 }
 
 if [ "$ONCE" -eq 1 ]; then

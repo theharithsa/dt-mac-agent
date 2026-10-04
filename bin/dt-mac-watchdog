@@ -15,7 +15,10 @@ LOG_FILE="$DTMA_LOG_DIR/watchdog.log"
 
 [ "$(id -u)" -eq 0 ] || { log ERROR "watchdog must run as root"; exit 1; }
 # Set by 'dtmacctl stop' so an intentional stop is not undone.
-[ -f "$DTMA_STATE_DIR/stopped" ] && exit 0
+if [ -f "$DTMA_STATE_DIR/stopped" ]; then
+  log INFO "skipped: agent stopped via 'dtmacctl stop'"
+  exit 0
+fi
 
 plist="$DTMA_PLIST_DIR/$DTMA_LABEL.plist"
 max_age=$((INTERVAL * 3))
@@ -42,5 +45,7 @@ if [ "$state" != "running" ]; then
 elif [ "$age" -gt "$max_age" ]; then
   log WARN "agent heartbeat is ${age}s old (max ${max_age}s); restarting"
   launchctl kickstart -k "system/$DTMA_LABEL" && bump_count watchdog_restarts
+else
+  log INFO "ok: agent running (pid $(job_field "$DTMA_LABEL" pid)), heartbeat ${age}s ago, restarts so far $(read_count watchdog_restarts)"
 fi
 exit 0

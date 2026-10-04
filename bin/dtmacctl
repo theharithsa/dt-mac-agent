@@ -19,7 +19,9 @@ Usage: sudo dtmacctl <command>
   start         enable and start agent + watchdog
   stop          stop agent + watchdog (stays stopped across reboots)
   restart       restart the agent
-  logs [-f]     show (or follow) agent and watchdog logs
+  logs [name] [-f]
+                show (or follow) logs; name = agent | ingest | watchdog | install (default: all)
+  payload       show the last metric batch sent to Dynatrace
   test          collect once and print the metric lines (nothing is sent)
   send-test     send a single test metric to Dynatrace
   config        show the configuration (token masked)
@@ -65,6 +67,7 @@ cmd_status() {
   fi
   [ -f "$DTMA_STATE_DIR/stopped" ] && echo "  NOTE: agent was stopped with 'dtmacctl stop'"
   if resolve_ingest 2>/dev/null; then printf '  %-10s: %s\n' endpoint "$INGEST_URL"; fi
+  printf '  %-10s: %s\n' logs "$DTMA_LOG_DIR"
 }
 
 cmd_start() {
@@ -121,9 +124,20 @@ case "$cmd" in
     launchctl kickstart -k "system/$DTMA_LABEL" && echo "restarted"
     ;;
   logs)
-    need_root logs
-    tail -n 100 "$@" "$DTMA_LOG_DIR/agent.log" "$DTMA_LOG_DIR/watchdog.log" 2>/dev/null
+    files=""
+    follow=""
+    for a in "$@"; do
+      case "$a" in
+        -f) follow="-f" ;;
+        agent|ingest|watchdog|install) files="$files $DTMA_LOG_DIR/$a.log" ;;
+        *) echo "unknown log '$a' (agent | ingest | watchdog | install)" >&2; exit 2 ;;
+      esac
+    done
+    [ -n "$files" ] || files="$DTMA_LOG_DIR/install.log $DTMA_LOG_DIR/watchdog.log $DTMA_LOG_DIR/agent.log $DTMA_LOG_DIR/ingest.log"
+    # shellcheck disable=SC2086
+    tail -n 50 $follow $files 2>/dev/null
     ;;
+  payload) cat "$DTMA_LOG_DIR/last-payload.txt" ;;
   test) exec /bin/bash "$DTMA_HOME/bin/dt-mac-agent" --dry-run ;;
   send-test) cmd_send_test ;;
   config)

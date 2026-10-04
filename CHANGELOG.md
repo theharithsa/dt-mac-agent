@@ -4,6 +4,24 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.0.2] - 2026-10-05
+
+### Added
+
+- `ingest.log`: one line per batch sent to Dynatrace with line count, size, HTTP result, accepted/invalid lines,
+  collect/send duration, spool size and a per-category breakdown. Re-sent buffered batches are logged too.
+- `last-payload.txt`: the most recent batch exactly as sent; `dtmacctl payload` prints it.
+- `LOG_PAYLOADS=1` option to append every full batch to `payloads.log`.
+- `install.log`: the full installer output with timestamps.
+- The watchdog logs the result of every check, not only restarts.
+- `dtmacctl logs [agent|ingest|watchdog|install] [-f]`.
+
+### Changed
+
+- Logs moved from `/var/log/dt-mac-agent` to `/Library/Logs/dt-mac-agent`, so they are visible in Console.app.
+  Runtime logs are readable without `sudo` (they never contain the token); `install.log` is readable by admin users.
+- Log timestamps use local time with the UTC offset.
+
 ## [0.0.1] - 2026-10-05
 
 ### Added
@@ -19,4 +37,5 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Log rotation via `newsyslog`.
 - CI (shellcheck + macOS dry-run) and tag-based GitHub release workflow.
 
+[0.0.2]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.0.2
 [0.0.1]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.0.1

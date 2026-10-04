@@ -16,15 +16,25 @@ PREFIX="/usr/local/dt-mac-agent"
 CONF_DIR="/etc/dt-mac-agent"
 CONF="$CONF_DIR/config"
 STATE_DIR="/var/lib/dt-mac-agent"
-LOG_DIR="/var/log/dt-mac-agent"
+LOG_DIR="/Library/Logs/dt-mac-agent"
 PLIST_DIR="/Library/LaunchDaemons"
 LABELS="com.theharithsa.dt-mac-agent com.theharithsa.dt-mac-agent.watchdog"
 
-say() { printf '==> %s\n' "$*"; }
-die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+say() { printf '%s ==> %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
+die() { printf '%s error: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >&2; exit 1; }
 
 [ "$(uname -s)" = "Darwin" ] || die "dt-mac-agent supports macOS only"
 [ "$(id -u)" -eq 0 ] || die "run as root: curl -fsSL https://raw.githubusercontent.com/$REPO/main/install.sh | sudo bash"
+
+# Mirror all installer output into install.log (readable by admin users).
+mkdir -p "$LOG_DIR"
+chown root:wheel "$LOG_DIR"
+chmod 755 "$LOG_DIR"
+touch "$LOG_DIR/install.log"
+chown root:admin "$LOG_DIR/install.log"
+chmod 640 "$LOG_DIR/install.log"
+exec > >(tee -a "$LOG_DIR/install.log") 2>&1
+say "dt-mac-agent installer started (user: ${SUDO_USER:-root}, macOS $(sw_vers -productVersion), $(uname -m))"
 
 TMP="$(mktemp -d /tmp/dt-mac-agent-install.XXXXXX)"
 trap 'rm -rf "$TMP"' EXIT
@@ -110,10 +120,13 @@ chmod 755 "$PREFIX" "$PREFIX/bin" "$PREFIX/lib" "$PREFIX"/bin/* "$PREFIX/uninsta
 chmod 644 "$PREFIX"/lib/* "$PREFIX/VERSION"
 ln -sf "$PREFIX/bin/dtmacctl" /usr/local/bin/dtmacctl
 
-chown root:wheel "$CONF_DIR" "$STATE_DIR" "$LOG_DIR"
+chown root:wheel "$CONF_DIR" "$STATE_DIR"
 chmod 700 "$CONF_DIR" "$STATE_DIR"
-chmod 755 "$LOG_DIR"
 rm -f "$STATE_DIR/stopped"
+if [ -d /var/log/dt-mac-agent ]; then
+  rm -rf /var/log/dt-mac-agent
+  say "Removed legacy log directory /var/log/dt-mac-agent (logs now in $LOG_DIR)"
+fi
 
 install -m 644 -o root -g wheel "$SRC/etc/newsyslog.d/dt-mac-agent.conf" /etc/newsyslog.d/dt-mac-agent.conf
 for l in $LABELS; do
@@ -161,7 +174,8 @@ say "dt-mac-agent $VERSION installed and running"
 cat <<EOF
 
   Status : sudo dtmacctl status
-  Logs   : sudo dtmacctl logs -f
+  Logs   : dtmacctl logs -f            ($LOG_DIR, also visible in Console.app)
+  Sends  : dtmacctl logs ingest -f
   Preview: dtmacctl test
   Remove : sudo dtmacctl uninstall
 

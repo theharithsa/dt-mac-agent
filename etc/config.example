@@ -22,3 +22,7 @@ INTERVAL=60
 # Offline buffer: batches are retried for up to this many minutes (max 55).
 SPOOL_MAX_AGE_MIN=55
 SPOOL_MAX_FILES=120
+
+# Set to 1 to append every full metric batch to /Library/Logs/dt-mac-agent/payloads.log
+# (~30 KB per minute, rotated at 10 MB). The latest batch is always in last-payload.txt.
+LOG_PAYLOADS=0
