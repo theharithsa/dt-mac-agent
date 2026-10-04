@@ -6,7 +6,7 @@
 #   (recommended: settings:objects:write to declare metric dimensions; log ingest permission when SEND_LOGS=1)
 #   Classic API token (dt0c01.*) needs scopes: metrics.ingest
 #   (recommended: settings.write; logs.ingest when SEND_LOGS=1)
-DT_ENV_URL="https://<your-environment-id>.apps.dynatrace.com"
+DT_ENV_URL="https://<your-environment-id>.live.dynatrace.com"
 DT_TOKEN="<token>"
 
 # Optional: full endpoint overrides (e.g. Managed or ActiveGate).

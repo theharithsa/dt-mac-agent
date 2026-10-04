@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] - 2026-10-05
+
+### Changed
+
+- `DT_ENV_URL` examples, prompts and docs use `https://<env-id>.live.dynatrace.com`. The agent accepts `.live.` or
+  `.apps.` and derives the correct host for the token type (API token → live, platform token → apps).
+- README: token section lists the required scopes per feature (`metrics.ingest`, `settings.write`, `logs.ingest`).
+
 ## [0.1.2] - 2026-10-05
 
 ### Added
@@ -80,6 +88,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Log rotation via `newsyslog`.
 - CI (shellcheck + macOS dry-run) and tag-based GitHub release workflow.
 
+[0.1.3]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.1.3
 [0.1.2]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.1.2
 [0.1.1]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.1.1
 [0.1.0]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.1.0

@@ -4,7 +4,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/theharithsa/dt-mac-agent/main/install.sh | sudo bash
 #
 # Every prompt can be answered up front with an environment variable (needed for unattended installs):
-#   DT_ENV_URL         Dynatrace environment URL, e.g. https://abc12345.apps.dynatrace.com
+#   DT_ENV_URL         Dynatrace environment URL, e.g. https://abc12345.live.dynatrace.com
 #   DT_TOKEN           Dynatrace token (dt0s16.* platform token or dt0c01.* API token)
 #   DTMA_PREFIX        install location (default: /usr/local/dt-mac-agent)
 #   DTMA_SEND_LOGS     1 = also send the agent's own logs to Dynatrace (default: 0)
@@ -132,7 +132,7 @@ DT_ENV_URL="${DT_ENV_URL:-}"
 DT_TOKEN="${DT_TOKEN:-}"
 if [ ! -f "$CONF" ]; then
   if [ "$INTERACTIVE" = "1" ]; then
-    [ -n "$DT_ENV_URL" ] || { ask "Dynatrace environment URL (e.g. https://abc12345.apps.dynatrace.com): " ""; DT_ENV_URL="$ANSWER"; }
+    [ -n "$DT_ENV_URL" ] || { ask "Dynatrace environment URL (e.g. https://abc12345.live.dynatrace.com): " ""; DT_ENV_URL="$ANSWER"; }
     [ -n "$DT_TOKEN" ] || { ask "Dynatrace token (input hidden): " "" 1; DT_TOKEN="$ANSWER"; }
   fi
   if [ -z "$DT_ENV_URL" ] || [ -z "$DT_TOKEN" ]; then die "DT_ENV_URL and DT_TOKEN are required"; fi

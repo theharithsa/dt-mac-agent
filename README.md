@@ -19,17 +19,21 @@ Current version: see [VERSION](VERSION) · Changes: [CHANGELOG.md](CHANGELOG.md)
 
 ### 1. Create a Dynatrace token
 
-| Token type | Prefix | Metrics | Metric definitions (recommended) | Logs (optional) |
-|---|---|---|---|---|
-| Platform token (recommended) | `dt0s16.` | `openpipeline:metrics:ingest` | `settings:objects:write` | log ingest permission |
-| Classic API token | `dt0c01.` | `metrics.ingest` | `settings.write` | `logs.ingest` |
+A classic **API token** (`dt0c01.`) is recommended. Create it under *Access tokens* in your environment:
 
-The settings permission lets the agent declare each metric's display name, description, unit **and dimensions**.
-The dimensions then appear in the metric definition and in split/filter pickers. Without it, the agent falls back
-to metadata lines (name, description and unit only).
+| Scope | Required? | Used for |
+|---|---|---|
+| `metrics.ingest` (Ingest metrics) | **Required** | Sending metrics |
+| `settings.write` (Write settings) | Recommended | Declaring each metric's name, description, unit and **dimensions** in its metric definition |
+| `logs.ingest` (Ingest logs) | Only with `SEND_LOGS=1` | Sending the agent's own logs |
 
-If a permission is missing, Dynatrace answers with `HTTP 403 ... missing required permission: <name>`.
-The installer's connection test shows this error, and so does `dtmacctl logs agent`.
+A platform token (`dt0s16.`) also works. It needs `openpipeline:metrics:ingest`, plus `settings:objects:write`
+(recommended) and log ingest permission when `SEND_LOGS=1`.
+
+Without the settings scope, metrics still flow and the agent falls back to sending only name, description and unit.
+In that case dimensions are not listed in the metric definition. If a scope is missing, Dynatrace answers
+`HTTP 403 ... missing required permission`. The error shows in the installer's connection test and in
+`dtmacctl logs agent` / `dtmacctl logs ingest`.
 
 ### 2. Install (one command, needs root)
 
@@ -51,7 +55,7 @@ Unattended example (MDM / scripts):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/theharithsa/dt-mac-agent/main/install.sh \
-  | sudo DT_ENV_URL="https://<env-id>.apps.dynatrace.com" DT_TOKEN="<token>" \
+  | sudo DT_ENV_URL="https://<env-id>.live.dynatrace.com" DT_TOKEN="<token>" \
          DTMA_PREFIX=/opt/dt-mac-agent DTMA_SEND_LOGS=1 bash
 ```
 
@@ -87,7 +91,7 @@ dt-mac-agent 0.1.0
   restarts  : 0 (by watchdog)
   log ship  : enabled, last result ok
   auto-upd. : enabled, last check 2026-10-05 10:20
-  endpoint  : https://<env-id>.apps.dynatrace.com/platform/classic/environment-api/v2/metrics/ingest
+  endpoint  : https://<env-id>.live.dynatrace.com/api/v2/metrics/ingest
   home      : /usr/local/dt-mac-agent
   logs      : /Library/Logs/dt-mac-agent
 ```
@@ -385,7 +389,7 @@ Edit `/etc/dt-mac-agent/config`, then run `sudo dtmacctl restart`.
 
 | Key | Default | Description |
 |---|---|---|
-| `DT_ENV_URL` | — | `https://<env-id>.apps.dynatrace.com` |
+| `DT_ENV_URL` | — | `https://<env-id>.live.dynatrace.com` (`.apps.` is accepted too) |
 | `DT_TOKEN` | — | Platform (`dt0s16.`) or API (`dt0c01.`) token |
 | `SEND_LOGS` | `0` | `1` = ship the agent's logs to Dynatrace |
 | `AUTO_UPDATE` | `1` | `1` = install new releases automatically (daily check) |
@@ -397,8 +401,14 @@ Edit `/etc/dt-mac-agent/config`, then run `sudo dtmacctl restart`.
 | `LOG_PAYLOADS` | `0` | `1` = append every full batch to `payloads.log` |
 | `DT_INGEST_URL` / `DT_LOGS_URL` | auto | Full endpoint overrides (Managed / ActiveGate) |
 
-Endpoints: platform tokens use `<DT_ENV_URL>/platform/classic/environment-api/v2/{metrics,logs}/ingest`, and
-classic API tokens use `https://<env-id>.live.dynatrace.com/api/v2/{metrics,logs}/ingest`.
+Endpoints are derived from `DT_ENV_URL` and the token type:
+
+| Token | Metrics / logs / settings endpoint |
+|---|---|
+| API token `dt0c01.` | `https://<env-id>.live.dynatrace.com/api/v2/{metrics/ingest,logs/ingest,settings/objects}` |
+| Platform token `dt0s16.` | `https://<env-id>.apps.dynatrace.com/platform/classic/environment-api/v2/{...}` |
+
+`DT_ENV_URL` can be given with `.live.` or `.apps.`; the agent picks the right host for the token type.
 
 ---
 

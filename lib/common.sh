@@ -60,7 +60,8 @@ load_config() {
   [ "$SPOOL_MAX_AGE_MIN" -le 55 ] || SPOOL_MAX_AGE_MIN=55
 }
 
-# Platform tokens (dt0s16.*) use the platform gateway; classic API tokens (dt0c01.*) the live API.
+# DT_ENV_URL may be given as https://<env>.live.dynatrace.com or https://<env>.apps.dynatrace.com.
+# Classic API tokens (dt0c01.*) use the live API; platform tokens (dt0s16.*) the platform gateway on apps.
 resolve_ingest() {
   local api_base
   if [ -z "$DT_TOKEN" ]; then log ERROR "DT_TOKEN is not set in $DTMA_CONFIG"; return 1; fi
@@ -72,7 +73,7 @@ resolve_ingest() {
       ;;
     *)
       AUTH_HEADER="Authorization: Bearer $DT_TOKEN"
-      api_base="$DT_ENV_URL/platform/classic/environment-api"
+      api_base="$(printf '%s' "$DT_ENV_URL" | sed 's#\.live\.dynatrace\.com#.apps.dynatrace.com#')/platform/classic/environment-api"
       ;;
   esac
   INGEST_URL="${DT_INGEST_URL:-$api_base/v2/metrics/ingest}"
