@@ -1,0 +1,2 @@
+# Variables are shared between scripts via sourced lib/*.sh files.
+disable=SC2034

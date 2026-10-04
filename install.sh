@@ -53,7 +53,7 @@ if [ -z "$SRC" ]; then
   curl -fsSL -o "$TMP/$tarball.sha256" "$base/$tarball.sha256" || die "checksum download failed"
   expected="$(awk '{print $1}' "$TMP/$tarball.sha256")"
   actual="$(shasum -a 256 "$TMP/$tarball" | awk '{print $1}')"
-  [ -n "$expected" ] && [ "$expected" = "$actual" ] || die "SHA-256 mismatch for $tarball"
+  if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then die "SHA-256 mismatch for $tarball"; fi
   say "Checksum verified"
   tar -xzf "$TMP/$tarball" -C "$TMP"
   SRC="$TMP/dt-mac-agent-$VERSION"
@@ -82,7 +82,7 @@ ask() {
 if [ ! -f "$CONF" ]; then
   [ -n "$DT_ENV_URL" ] || DT_ENV_URL="$(ask 'Dynatrace environment URL (e.g. https://abc12345.apps.dynatrace.com): ' 0)"
   [ -n "$DT_TOKEN" ] || DT_TOKEN="$(ask 'Dynatrace token (input hidden): ' 1)"
-  [ -n "$DT_ENV_URL" ] && [ -n "$DT_TOKEN" ] || die "DT_ENV_URL and DT_TOKEN are required"
+  if [ -z "$DT_ENV_URL" ] || [ -z "$DT_TOKEN" ]; then die "DT_ENV_URL and DT_TOKEN are required"; fi
 fi
 
 # Strict validation: the config file is sourced by root.
@@ -102,7 +102,7 @@ for l in $LABELS; do launchctl bootout "system/$l" 2>/dev/null || true; done
 # --- 4. Install files ---
 say "Installing dt-mac-agent $VERSION to $PREFIX"
 mkdir -p "$PREFIX" "$CONF_DIR" "$STATE_DIR" "$LOG_DIR" /usr/local/bin /etc/newsyslog.d
-rm -rf "$PREFIX/bin" "$PREFIX/lib"
+rm -rf "${PREFIX:?}/bin" "${PREFIX:?}/lib"
 cp -R "$SRC/bin" "$SRC/lib" "$PREFIX/"
 cp "$SRC/VERSION" "$SRC/uninstall.sh" "$PREFIX/"
 chown -R root:wheel "$PREFIX"
