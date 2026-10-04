@@ -45,7 +45,7 @@ The installer:
 4. Sends a test metric. **If Dynatrace rejects it, the agent is not started.**
 5. Loads the agent and watchdog `launchd` daemons.
 
-Pin a version with `DTMA_VERSION=0.0.1`. Re-running the installer upgrades in place and keeps your config
+Pin a version with `DTMA_VERSION=0.0.2`. Re-running the installer upgrades in place and keeps your config
 (pass `DT_TOKEN` again to rotate the token).
 
 ### 3. Verify
@@ -55,7 +55,7 @@ sudo dtmacctl status
 ```
 
 ```text
-dt-mac-agent 0.0.1
+dt-mac-agent 0.0.2
   agent     : loaded, state=running, pid=812, last exit=(never exited)
   watchdog  : loaded, state=not running, pid=, last exit=0
   heartbeat : 14s ago
@@ -311,7 +311,7 @@ Example `watchdog.log` line:
 |---|---|
 | `HTTP 401` | Token invalid or expired. Re-run the installer with `DT_TOKEN=<new>` |
 | `HTTP 403 ... missing required permission` | Add the permission from the token table above |
-| `HTTP 400` | Some lines were rejected. Details are in `sudo dtmacctl logs` |
+| `HTTP 400` | Some lines were rejected. Details are in `dtmacctl logs ingest` |
 | No data after install | `sudo dtmacctl status`, then `sudo dtmacctl send-test` |
 | Agent keeps restarting | `dtmacctl logs agent` and `/Library/Logs/dt-mac-agent/agent.stderr.log` |
 
