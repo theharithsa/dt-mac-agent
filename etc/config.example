@@ -1,0 +1,24 @@
+# dt-mac-agent configuration: /etc/dt-mac-agent/config (root:wheel, mode 600).
+# This file is sourced by bash; keep the KEY="value" format.
+
+# Dynatrace environment URL and token.
+#   Platform token (dt0s16.*) needs permission: openpipeline:metrics:ingest
+#   Classic API token (dt0c01.*) needs scope: metrics.ingest
+DT_ENV_URL="https://<your-environment-id>.apps.dynatrace.com"
+DT_TOKEN="<token>"
+
+# Optional: full ingest endpoint override (e.g. Managed or ActiveGate).
+# DT_INGEST_URL="https://<activegate>:9999/e/<env-id>/api/v2/metrics/ingest"
+
+# Metric key prefix, e.g. macos.cpu.usage
+METRIC_PREFIX="macos"
+
+# Number of top processes reported by CPU and by memory.
+TOP_N=10
+
+# Collection interval in seconds.
+INTERVAL=60
+
+# Offline buffer: batches are retried for up to this many minutes (max 55).
+SPOOL_MAX_AGE_MIN=55
+SPOOL_MAX_FILES=120

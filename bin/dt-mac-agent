@@ -1,0 +1,101 @@
+#!/bin/bash
+# dt-mac-agent: collects macOS host metrics every interval and pushes them to Dynatrace.
+set -u
+umask 077
+
+_self="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)"
+if [ -z "${DTMA_HOME:-}" ]; then
+  if [ -f "$_self/lib/common.sh" ]; then DTMA_HOME="$_self"; else DTMA_HOME="/usr/local/dt-mac-agent"; fi
+fi
+# shellcheck source=/dev/null
+. "$DTMA_HOME/lib/common.sh"
+# shellcheck source=/dev/null
+. "$DTMA_HOME/lib/collectors.sh"
+
+usage() {
+  cat <<EOF
+Usage: dt-mac-agent [--once] [--dry-run] [--version]
+  --once      collect and send a single batch, then exit
+  --dry-run   collect a single batch and print it to stdout (nothing is sent)
+  --version   print version
+EOF
+}
+
+ONCE=0
+DRY=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --once) ONCE=1 ;;
+    --dry-run) DRY=1; ONCE=1 ;;
+    --version) echo "$DTMA_VERSION"; exit 0 ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+load_config
+if [ "$DRY" -eq 1 ]; then
+  # Use a scratch state dir so a dry run never disturbs the running agent's counters.
+  _real_state="$DTMA_STATE_DIR"
+  DTMA_STATE_DIR="$(mktemp -d /tmp/dt-mac-agent.XXXXXX)"
+  cp "$_real_state/counters.tsv" "$DTMA_STATE_DIR/" 2>/dev/null || true
+  trap 'rm -rf "$DTMA_STATE_DIR"' EXIT
+else
+  resolve_ingest || exit 1
+  [ "$ONCE" -eq 1 ] || LOG_FILE="$DTMA_LOG_DIR/agent.log"
+fi
+init_dirs
+host_info
+
+heartbeat() { date +%s >"$DTMA_STATE_DIR/heartbeat"; }
+
+ensure_watchdog() {
+  [ "$(id -u)" -eq 0 ] || return 0
+  [ -f "$DTMA_PLIST_DIR/$DTMA_WD_LABEL.plist" ] || return 0
+  job_loaded "$DTMA_WD_LABEL" && return 0
+  log WARN "watchdog job not loaded; bootstrapping it"
+  launchctl bootstrap system "$DTMA_PLIST_DIR/$DTMA_WD_LABEL.plist" 2>/dev/null || log ERROR "failed to bootstrap watchdog"
+}
+
+run_cycle() {
+  local start records="$WORK_DIR/records.tsv" payload="$WORK_DIR/payload.txt" state="$DTMA_STATE_DIR/counters.tsv" lines
+  start="$(date +%s)"
+  rm -f "$WORK_DIR"/*
+  collect_all >"$records" 2>"$WORK_DIR/collect.err"
+  rec G agent.collect.seconds "$(($(date +%s) - start))" >>"$records"
+  if [ -s "$WORK_DIR/collect.err" ]; then
+    log WARN "collector stderr: $(head -c 300 "$WORK_DIR/collect.err" | tr '\n' ' ')"
+  fi
+
+  awk -f "$DTMA_HOME/lib/format.awk" \
+    -v prefix="$METRIC_PREFIX" -v ts="${start}000" \
+    -v host="$HOST_NAME" -v osver="$OS_VERSION" -v model="$HW_MODEL" -v arch="$ARCH" \
+    -v statefile="$state" -v newstate="$state.new" "$records" >"$payload" &&
+    mv -f "$state.new" "$state"
+
+  if [ "$DRY" -eq 1 ]; then
+    cat "$payload"
+    return 0
+  fi
+  send_payload "$payload"
+  lines="$(wc -l <"$payload" | tr -d ' ')"
+  printf '%s %s %s\n' "$(date +%s)" "$lines" "$LAST_STATUS" >"$DTMA_STATE_DIR/last_status"
+}
+
+if [ "$ONCE" -eq 1 ]; then
+  run_cycle
+  exit 0
+fi
+
+trap 'log INFO "received stop signal; exiting"; exit 0' TERM INT
+log INFO "starting dt-mac-agent $DTMA_VERSION (pid $$, interval ${INTERVAL}s, endpoint $INGEST_URL)"
+while true; do
+  heartbeat
+  ensure_watchdog
+  run_cycle || log ERROR "collection cycle failed"
+  heartbeat
+  # Background sleep + wait lets the TERM trap fire immediately.
+  sleep $((INTERVAL - $(date +%s) % INTERVAL)) &
+  wait $!
+done

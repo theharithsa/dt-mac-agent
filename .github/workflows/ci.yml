@@ -1,0 +1,30 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck -s bash bin/dt-mac-agent bin/dt-mac-watchdog bin/dtmacctl lib/*.sh install.sh uninstall.sh
+
+  dry-run:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate plists
+        run: plutil -lint launchd/*.plist
+      - name: Collect once
+        run: |
+          bash bin/dt-mac-agent --dry-run | tee out.txt
+          lines=$(wc -l < out.txt)
+          echo "lines: $lines"
+          test "$lines" -gt 40
+          grep -q '^macos.cpu.usage,' out.txt
+          grep -q '^macos.memory.used,' out.txt
+          grep -q '^macos.process.cpu,top.by="cpu",rank="1"' out.txt

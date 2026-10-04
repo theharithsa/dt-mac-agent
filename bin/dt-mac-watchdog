@@ -1,0 +1,46 @@
+#!/bin/bash
+# dt-mac-watchdog: run by launchd every 60s; restarts the agent if it is unloaded, stopped or hung.
+set -u
+umask 077
+
+_self="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)"
+if [ -z "${DTMA_HOME:-}" ]; then
+  if [ -f "$_self/lib/common.sh" ]; then DTMA_HOME="$_self"; else DTMA_HOME="/usr/local/dt-mac-agent"; fi
+fi
+# shellcheck source=/dev/null
+. "$DTMA_HOME/lib/common.sh"
+
+load_config
+LOG_FILE="$DTMA_LOG_DIR/watchdog.log"
+
+[ "$(id -u)" -eq 0 ] || { log ERROR "watchdog must run as root"; exit 1; }
+# Set by 'dtmacctl stop' so an intentional stop is not undone.
+[ -f "$DTMA_STATE_DIR/stopped" ] && exit 0
+
+plist="$DTMA_PLIST_DIR/$DTMA_LABEL.plist"
+max_age=$((INTERVAL * 3))
+
+if ! job_loaded "$DTMA_LABEL"; then
+  log WARN "agent job not loaded; bootstrapping"
+  launchctl enable "system/$DTMA_LABEL"
+  if launchctl bootstrap system "$plist" 2>/dev/null; then
+    bump_count watchdog_restarts
+  else
+    log ERROR "failed to bootstrap $plist"
+  fi
+  exit 0
+fi
+
+state="$(job_field "$DTMA_LABEL" state)"
+hb="$(cat "$DTMA_STATE_DIR/heartbeat" 2>/dev/null || echo 0)"
+case "$hb" in ''|*[!0-9]*) hb=0 ;; esac
+age=$(($(date +%s) - hb))
+
+if [ "$state" != "running" ]; then
+  log WARN "agent state is '${state:-unknown}'; kickstarting"
+  launchctl kickstart "system/$DTMA_LABEL" && bump_count watchdog_restarts
+elif [ "$age" -gt "$max_age" ]; then
+  log WARN "agent heartbeat is ${age}s old (max ${max_age}s); restarting"
+  launchctl kickstart -k "system/$DTMA_LABEL" && bump_count watchdog_restarts
+fi
+exit 0

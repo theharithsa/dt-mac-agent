@@ -1,0 +1,140 @@
+#!/bin/bash
+# dtmacctl: control and inspect dt-mac-agent.
+set -u
+
+_self="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)"
+if [ -z "${DTMA_HOME:-}" ]; then
+  if [ -f "$_self/lib/common.sh" ]; then DTMA_HOME="$_self"; else DTMA_HOME="/usr/local/dt-mac-agent"; fi
+fi
+# shellcheck source=/dev/null
+. "$DTMA_HOME/lib/common.sh"
+
+usage() {
+  cat <<EOF
+dtmacctl $DTMA_VERSION - control dt-mac-agent
+
+Usage: sudo dtmacctl <command>
+
+  status        show agent, watchdog, heartbeat and last ingest result
+  start         enable and start agent + watchdog
+  stop          stop agent + watchdog (stays stopped across reboots)
+  restart       restart the agent
+  logs [-f]     show (or follow) agent and watchdog logs
+  test          collect once and print the metric lines (nothing is sent)
+  send-test     send a single test metric to Dynatrace
+  config        show the configuration (token masked)
+  version       print version
+  uninstall [--keep-config]
+                remove dt-mac-agent from this Mac
+EOF
+}
+
+need_root() {
+  [ "$(id -u)" -eq 0 ] || { echo "dtmacctl: '$1' requires root (use sudo)" >&2; exit 1; }
+}
+
+job_line() {
+  local label="$1" name="$2"
+  if job_loaded "$label"; then
+    printf '  %-10s: loaded, state=%s, pid=%s, last exit=%s\n' "$name" \
+      "$(job_field "$label" state)" "$(job_field "$label" pid)" "$(job_field "$label" 'last exit code')"
+  else
+    printf '  %-10s: not loaded\n' "$name"
+  fi
+}
+
+cmd_status() {
+  local hb last
+  load_config
+  echo "dt-mac-agent $DTMA_VERSION"
+  job_line "$DTMA_LABEL" agent
+  job_line "$DTMA_WD_LABEL" watchdog
+  if [ -r "$DTMA_STATE_DIR/heartbeat" ]; then
+    hb="$(cat "$DTMA_STATE_DIR/heartbeat")"
+    printf '  %-10s: %ss ago\n' heartbeat "$(($(date +%s) - hb))"
+    if [ -r "$DTMA_STATE_DIR/last_status" ]; then
+      last="$(cat "$DTMA_STATE_DIR/last_status")"
+      printf '  %-10s: %s (%s lines, %s)\n' "last send" "$(date -r "${last%% *}" '+%Y-%m-%d %H:%M:%S')" \
+        "$(echo "$last" | awk '{print $2}')" "$(echo "$last" | cut -d' ' -f3-)"
+    fi
+    SPOOL_DIR="$DTMA_STATE_DIR/spool"
+    printf '  %-10s: %s buffered batches\n' spool "$(spool_count)"
+    printf '  %-10s: %s\n' restarts "$(read_count watchdog_restarts) (by watchdog)"
+  else
+    echo "  (run with sudo for heartbeat and ingest details)"
+  fi
+  [ -f "$DTMA_STATE_DIR/stopped" ] && echo "  NOTE: agent was stopped with 'dtmacctl stop'"
+  if resolve_ingest 2>/dev/null; then printf '  %-10s: %s\n' endpoint "$INGEST_URL"; fi
+}
+
+cmd_start() {
+  local l
+  need_root start
+  rm -f "$DTMA_STATE_DIR/stopped"
+  for l in "$DTMA_LABEL" "$DTMA_WD_LABEL"; do
+    launchctl enable "system/$l"
+    job_loaded "$l" || launchctl bootstrap system "$DTMA_PLIST_DIR/$l.plist"
+  done
+  echo "started"
+}
+
+cmd_stop() {
+  local l
+  need_root stop
+  mkdir -p "$DTMA_STATE_DIR" && touch "$DTMA_STATE_DIR/stopped"
+  for l in "$DTMA_LABEL" "$DTMA_WD_LABEL"; do
+    launchctl disable "system/$l"
+    launchctl bootout "system/$l" 2>/dev/null || true
+  done
+  echo "stopped (run 'sudo dtmacctl start' to resume)"
+}
+
+cmd_send_test() {
+  local f rc
+  load_config
+  [ -r "$DTMA_CONFIG" ] || { echo "cannot read $DTMA_CONFIG (use sudo)" >&2; exit 1; }
+  resolve_ingest || exit 1
+  host_info
+  DTMA_STATE_DIR="$(mktemp -d /tmp/dt-mac-agent-test.XXXXXX)"
+  init_dirs
+  f="$WORK_DIR/test.txt"
+  printf '%s.agent.test,host.name="%s",agent.version="%s" gauge,1\n' "$METRIC_PREFIX" "$HOST_NAME" "$DTMA_VERSION" >"$f"
+  send_file "$f"
+  rc=$?
+  rm -rf "$DTMA_STATE_DIR"
+  if [ "$rc" -eq 0 ] && [ "$LAST_STATUS" != "partial 400" ]; then
+    echo "OK: Dynatrace accepted the test metric ($LAST_STATUS) at $INGEST_URL"
+  else
+    echo "FAILED: $LAST_STATUS from $INGEST_URL" >&2
+    exit 1
+  fi
+}
+
+cmd="${1:-help}"
+[ $# -gt 0 ] && shift
+case "$cmd" in
+  status) cmd_status ;;
+  start) cmd_start ;;
+  stop) cmd_stop ;;
+  restart)
+    need_root restart
+    launchctl kickstart -k "system/$DTMA_LABEL" && echo "restarted"
+    ;;
+  logs)
+    need_root logs
+    tail -n 100 "$@" "$DTMA_LOG_DIR/agent.log" "$DTMA_LOG_DIR/watchdog.log" 2>/dev/null
+    ;;
+  test) exec /bin/bash "$DTMA_HOME/bin/dt-mac-agent" --dry-run ;;
+  send-test) cmd_send_test ;;
+  config)
+    need_root config
+    sed -E 's/^(DT_TOKEN=["]?[^.]*\.[^.]*\.).*/\1****"/' "$DTMA_CONFIG"
+    ;;
+  version|--version) echo "$DTMA_VERSION" ;;
+  uninstall)
+    need_root uninstall
+    exec /bin/bash "$DTMA_HOME/uninstall.sh" "$@"
+    ;;
+  help|-h|--help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac
