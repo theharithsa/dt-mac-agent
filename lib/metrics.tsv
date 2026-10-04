@@ -1,0 +1,82 @@
+# Metric catalog: key (without prefix) <TAB> type <TAB> unit <TAB> display name <TAB> description
+# Sent to Dynatrace as metadata lines (dt.meta.*) and used to generate the README table.
+cpu.usage	gauge	Percent	CPU usage	Total CPU utilization (user + system) across all cores, sampled over 1 second.
+cpu.user	gauge	Percent	CPU user time	Share of CPU time spent in user-space processes.
+cpu.system	gauge	Percent	CPU system time	Share of CPU time spent in the kernel.
+cpu.idle	gauge	Percent	CPU idle time	Share of CPU time spent idle.
+cpu.load1	gauge	Unspecified	CPU load average (1 min)	Average number of runnable threads over the last minute.
+cpu.load5	gauge	Unspecified	CPU load average (5 min)	Average number of runnable threads over the last 5 minutes.
+cpu.load15	gauge	Unspecified	CPU load average (15 min)	Average number of runnable threads over the last 15 minutes.
+cpu.cores.logical	gauge	Count	CPU logical cores	Number of logical CPU cores.
+cpu.cores.physical	gauge	Count	CPU physical cores	Number of physical CPU cores.
+cpu.speed_limit	gauge	Percent	CPU speed limit	Thermal CPU speed limit (100 = not throttled). Intel Macs only.
+cpu.scheduler_limit	gauge	Percent	CPU scheduler limit	Thermal CPU scheduler limit (100 = not throttled). Intel Macs only.
+system.thermal.warning	gauge	Unspecified	Thermal warning	1 when macOS has recorded a thermal warning, otherwise 0.
+system.processes	gauge	Count	Processes	Total number of processes.
+system.threads	gauge	Count	Threads	Total number of threads.
+system.uptime	gauge	Second	Uptime	Time since the last boot.
+system.users	gauge	Count	Logged-in sessions	Number of logged-in user sessions.
+system.open_files	gauge	Count	Open files	Number of open file descriptors system-wide.
+system.open_files.max	gauge	Count	Open files limit	Maximum number of open file descriptors system-wide.
+memory.total	gauge	Byte	Memory total	Installed physical memory.
+memory.used	gauge	Byte	Memory used	App + wired + compressed memory (as shown in Activity Monitor).
+memory.free	gauge	Byte	Memory free	Free and speculative memory pages.
+memory.app	gauge	Byte	Memory used by apps	Anonymous memory used by applications, excluding purgeable memory.
+memory.wired	gauge	Byte	Memory wired	Memory that cannot be compressed or paged out.
+memory.compressed	gauge	Byte	Memory compressed	Physical memory occupied by the memory compressor.
+memory.cached	gauge	Byte	Memory cached files	File-backed and purgeable memory that can be reclaimed.
+memory.usage	gauge	Percent	Memory usage	Memory used as a percentage of total memory.
+memory.pressure.level	gauge	Unspecified	Memory pressure level	macOS memory pressure: 1 = normal, 2 = warning, 4 = critical.
+memory.available.percent	gauge	Percent	Memory available	Kernel memory availability level (higher is better).
+memory.swap.total	gauge	Byte	Swap total	Size of the swap files.
+memory.swap.used	gauge	Byte	Swap used	Swap space in use.
+memory.swap.usage	gauge	Percent	Swap usage	Swap used as a percentage of swap total.
+memory.pageins.count	count	Count	Page-ins	Pages read from disk into memory during the interval.
+memory.pageouts.count	count	Count	Page-outs	Pages written from memory to disk during the interval.
+memory.swapins.count	count	Count	Swap-ins	Pages swapped in during the interval.
+memory.swapouts.count	count	Count	Swap-outs	Pages swapped out during the interval.
+memory.compressions.count	count	Count	Memory compressions	Pages compressed during the interval.
+memory.decompressions.count	count	Count	Memory decompressions	Pages decompressed during the interval.
+disk.total	gauge	Byte	Disk capacity	Capacity of the volume.
+disk.used	gauge	Byte	Disk used	Space used on the volume.
+disk.free	gauge	Byte	Disk free	Space available on the volume.
+disk.usage	gauge	Percent	Disk usage	Used space as a percentage of used + available.
+disk.inodes.used	gauge	Count	Inodes used	Number of used inodes on the volume.
+disk.inodes.free	gauge	Count	Inodes free	Number of free inodes on the volume.
+disk.io.read.bytes.count	count	Byte	Disk bytes read	Bytes read from the disk during the interval.
+disk.io.write.bytes.count	count	Byte	Disk bytes written	Bytes written to the disk during the interval.
+disk.io.read.ops.count	count	Count	Disk read operations	Read operations during the interval.
+disk.io.write.ops.count	count	Count	Disk write operations	Write operations during the interval.
+disk.io.read.time.count	count	NanoSecond	Disk read time	Total time spent on reads during the interval (divide by read operations for latency).
+disk.io.write.time.count	count	NanoSecond	Disk write time	Total time spent on writes during the interval (divide by write operations for latency).
+disk.io.errors.count	count	Count	Disk I/O errors	Read and write errors during the interval.
+net.bytes.in.count	count	Byte	Network bytes received	Bytes received on the interface during the interval.
+net.bytes.out.count	count	Byte	Network bytes sent	Bytes sent on the interface during the interval.
+net.packets.in.count	count	Count	Network packets received	Packets received on the interface during the interval.
+net.packets.out.count	count	Count	Network packets sent	Packets sent on the interface during the interval.
+net.errors.in.count	count	Count	Network receive errors	Receive errors on the interface during the interval.
+net.errors.out.count	count	Count	Network send errors	Send errors on the interface during the interval.
+net.tcp.established	gauge	Count	TCP connections established	Number of TCP connections in ESTABLISHED state.
+power.on_ac	gauge	Unspecified	On AC power	1 when running on AC power, 0 on battery.
+battery.percent	gauge	Percent	Battery charge	Battery state of charge.
+battery.charging	gauge	Unspecified	Battery charging	1 while the battery is charging, otherwise 0.
+battery.cycle_count	gauge	Count	Battery cycle count	Battery charge cycle count.
+battery.health	gauge	Percent	Battery health	Current maximum capacity as a percentage of design capacity.
+battery.temperature	gauge	Unspecified	Battery temperature (°C)	Battery temperature in degrees Celsius.
+process.cpu	gauge	Percent	Process CPU usage	CPU used by all instances of the process, in % of one core (can exceed 100).
+process.memory.rss	gauge	Byte	Process memory (RSS)	Resident memory of all instances of the process.
+process.memory.percent	gauge	Percent	Process memory usage	Resident memory of the process as a percentage of physical memory.
+process.threads	gauge	Count	Process threads	Threads across all instances of the process.
+process.instances	gauge	Count	Process instances	Number of running instances (PIDs) of the process.
+app.cpu	gauge	Percent	App CPU usage	CPU used by the app and all its helper processes, in % of one core (can exceed 100).
+app.memory.rss	gauge	Byte	App memory (RSS)	Resident memory of the app and all its helper processes.
+app.memory.percent	gauge	Percent	App memory usage	Resident memory of the app as a percentage of physical memory.
+app.processes	gauge	Count	App processes	Number of processes belonging to the app.
+app.threads	gauge	Count	App threads	Threads across all processes of the app.
+apps.running	gauge	Count	Running apps	Number of running .app bundles (user and system).
+apps.running.user	gauge	Count	Running user apps	Number of running apps from /Applications, /System/Applications or ~/Applications.
+agent.heartbeat	gauge	Unspecified	Agent heartbeat	Always 1; reported once per collection cycle.
+agent.collect.duration	gauge	Second	Agent collection duration	Time taken to collect one batch.
+agent.spool.files	gauge	Count	Agent buffered batches	Batches waiting to be re-sent after a failed ingest.
+agent.ingest.failures.count	count	Count	Agent ingest failures	Failed metric ingest requests during the interval.
+agent.watchdog.restarts.count	count	Count	Agent watchdog restarts	Agent restarts triggered by the watchdog during the interval.

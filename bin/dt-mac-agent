@@ -3,10 +3,12 @@
 set -u
 umask 077
 
-_self="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)"
-if [ -z "${DTMA_HOME:-}" ]; then
-  if [ -f "$_self/lib/common.sh" ]; then DTMA_HOME="$_self"; else DTMA_HOME="/usr/local/dt-mac-agent"; fi
-fi
+_src="${BASH_SOURCE[0]}"
+while [ -L "$_src" ]; do
+  _t="$(readlink "$_src")"
+  case "$_t" in /*) _src="$_t" ;; *) _src="$(dirname "$_src")/$_t" ;; esac
+done
+DTMA_HOME="${DTMA_HOME:-$(cd "$(dirname "$_src")/.." && pwd)}"
 # shellcheck source=/dev/null
 . "$DTMA_HOME/lib/common.sh"
 # shellcheck source=/dev/null
@@ -66,7 +68,7 @@ run_cycle() {
   start="$(date +%s)"
   rm -f "$WORK_DIR"/*
   collect_all >"$records" 2>"$WORK_DIR/collect.err"
-  rec G agent.collect.seconds "$(($(date +%s) - start))" >>"$records"
+  rec G agent.collect.duration "$(($(date +%s) - start))" >>"$records"
   if [ -s "$WORK_DIR/collect.err" ]; then
     log WARN "collector stderr: $(head -c 300 "$WORK_DIR/collect.err" | tr '\n' ' ')"
   fi
@@ -84,6 +86,7 @@ run_cycle() {
   sent_at="$(date +%s)"
   SENT_OK=0
   SENT_INVALID=0
+  send_metadata
   send_payload "$payload"
   lines="$(wc -l <"$payload" | tr -d ' ')"
   bytes="$(wc -c <"$payload" | tr -d ' ')"
@@ -96,6 +99,7 @@ run_cycle() {
     if [ "$LOG_PAYLOADS" = "1" ]; then
       { echo "# $(date '+%Y-%m-%d %H:%M:%S %z') $LAST_STATUS"; cat "$payload"; } >>"$DTMA_LOG_DIR/payloads.log"
     fi
+    ship_logs
   fi
 }
 
@@ -105,7 +109,7 @@ if [ "$ONCE" -eq 1 ]; then
 fi
 
 trap 'log INFO "received stop signal; exiting"; exit 0' TERM INT
-log INFO "starting dt-mac-agent $DTMA_VERSION (pid $$, interval ${INTERVAL}s, endpoint $INGEST_URL)"
+log INFO "starting dt-mac-agent $DTMA_VERSION (pid $$, home $DTMA_HOME, interval ${INTERVAL}s, send logs: $SEND_LOGS, auto-update: $AUTO_UPDATE, endpoint $INGEST_URL)"
 while true; do
   heartbeat
   ensure_watchdog

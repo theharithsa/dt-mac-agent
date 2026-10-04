@@ -2,10 +2,12 @@
 # dtmacctl: control and inspect dt-mac-agent.
 set -u
 
-_self="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)"
-if [ -z "${DTMA_HOME:-}" ]; then
-  if [ -f "$_self/lib/common.sh" ]; then DTMA_HOME="$_self"; else DTMA_HOME="/usr/local/dt-mac-agent"; fi
-fi
+_src="${BASH_SOURCE[0]}"
+while [ -L "$_src" ]; do
+  _t="$(readlink "$_src")"
+  case "$_t" in /*) _src="$_t" ;; *) _src="$(dirname "$_src")/$_t" ;; esac
+done
+DTMA_HOME="${DTMA_HOME:-$(cd "$(dirname "$_src")/.." && pwd)}"
 # shellcheck source=/dev/null
 . "$DTMA_HOME/lib/common.sh"
 
@@ -22,8 +24,11 @@ Usage: sudo dtmacctl <command>
   logs [name] [-f]
                 show (or follow) logs; name = agent | ingest | watchdog | install (default: all)
   payload       show the last metric batch sent to Dynatrace
+  metrics       list all metrics with unit and description
   test          collect once and print the metric lines (nothing is sent)
   send-test     send a single test metric to Dynatrace
+  update [--check]
+                install the latest GitHub release now (--check: only report)
   config        show the configuration (token masked)
   version       print version
   uninstall [--keep-config]
@@ -62,12 +67,36 @@ cmd_status() {
     SPOOL_DIR="$DTMA_STATE_DIR/spool"
     printf '  %-10s: %s buffered batches\n' spool "$(spool_count)"
     printf '  %-10s: %s\n' restarts "$(read_count watchdog_restarts) (by watchdog)"
+    if [ "$SEND_LOGS" = "1" ]; then
+      printf '  %-10s: enabled, last result %s\n' "log ship" "$(cat "$DTMA_STATE_DIR/logship.status" 2>/dev/null || echo pending)"
+    else
+      printf '  %-10s: disabled\n' "log ship"
+    fi
+    if [ -r "$DTMA_STATE_DIR/update.checked" ]; then
+      printf '  %-10s: %s, last check %s\n' "auto-upd." "$([ "$AUTO_UPDATE" = 1 ] && echo enabled || echo disabled)" \
+        "$(date -r "$(cat "$DTMA_STATE_DIR/update.checked")" '+%Y-%m-%d %H:%M')"
+    fi
   else
     echo "  (run with sudo for heartbeat and ingest details)"
   fi
   [ -f "$DTMA_STATE_DIR/stopped" ] && echo "  NOTE: agent was stopped with 'dtmacctl stop'"
   if resolve_ingest 2>/dev/null; then printf '  %-10s: %s\n' endpoint "$INGEST_URL"; fi
+  printf '  %-10s: %s\n' home "$DTMA_HOME"
   printf '  %-10s: %s\n' logs "$DTMA_LOG_DIR"
+}
+
+cmd_update() {
+  local latest
+  need_root update
+  latest="$(latest_version)"
+  [ -n "$latest" ] || { echo "could not reach GitHub" >&2; exit 1; }
+  if ! version_gt "$latest" "$DTMA_VERSION"; then
+    echo "up to date ($DTMA_VERSION)"
+    return 0
+  fi
+  echo "new release available: $latest (installed $DTMA_VERSION)"
+  [ "${1:-}" = "--check" ] && return 0
+  run_update "$latest" verbose
 }
 
 cmd_start() {
@@ -138,6 +167,11 @@ case "$cmd" in
     tail -n 50 $follow $files 2>/dev/null
     ;;
   payload) cat "$DTMA_LOG_DIR/last-payload.txt" ;;
+  metrics)
+    load_config
+    awk -F "$TAB" -v p="$METRIC_PREFIX" '!/^#/ && NF >= 5 { printf "%-38s %-6s %-12s %s\n", p "." $1, $2, $3, $5 }' "$DTMA_HOME/lib/metrics.tsv"
+    ;;
+  update) cmd_update "$@" ;;
   test) exec /bin/bash "$DTMA_HOME/bin/dt-mac-agent" --dry-run ;;
   send-test) cmd_send_test ;;
   config)

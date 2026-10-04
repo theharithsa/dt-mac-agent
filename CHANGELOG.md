@@ -4,6 +4,31 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.0] - 2026-10-05
+
+### Added
+
+- Metric metadata: every metric is sent with a display name, description and unit (`dt.meta.*`) at start-up,
+  after upgrades and daily. The catalog lives in `lib/metrics.tsv`, and `dtmacctl metrics` lists it.
+- Auto-update: the watchdog checks GitHub releases once a day and installs newer versions after SHA-256
+  verification (`AUTO_UPDATE=1`, default). Manual: `sudo dtmacctl update [--check]`.
+- Optional shipping of the agent's own logs to Dynatrace Logs (`SEND_LOGS=1`), with original timestamps,
+  log levels and `service.name=dt-mac-agent`.
+- Installer prompts for install location, log shipping and auto-update (or `DTMA_PREFIX`, `DTMA_SEND_LOGS`,
+  `DTMA_AUTO_UPDATE`). Installing to a custom location is validated for safe, root-owned parent directories.
+- New metrics: `process.instances`, `app.threads`, `app.memory.percent`. New dimension: `app.bundle.id`.
+
+### Changed (breaking: metric keys and dimensions)
+
+- Processes are grouped by executable name and owner. The `rank`, `top.by` and `pid` dimensions are removed;
+  they split one process into many short, gappy series. The agent reports the union of the top `TOP_N` groups
+  by CPU and by memory.
+- Dimensions renamed to semantic names: `process.name` → `process.executable.name`, `user` → `process.owner`,
+  `mount`/`device` → `disk.mount`/`disk.device`, `disk` → `disk.device`, `interface` → `network.interface`,
+  `arch`/`hw.model` → `host.arch`/`host.model`; added `os.type` and `process.executable.path`.
+- `agent.collect.seconds` → `agent.collect.duration`; `disk.io.*.time_ns.count` → `disk.io.*.time.count` (unit NanoSecond).
+- Installer log lines use the same format as the other logs.
+
 ## [0.0.2] - 2026-10-05
 
 ### Added
@@ -37,5 +62,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Log rotation via `newsyslog`.
 - CI (shellcheck + macOS dry-run) and tag-based GitHub release workflow.
 
+[0.1.0]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.1.0
 [0.0.2]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.0.2
 [0.0.1]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.0.1

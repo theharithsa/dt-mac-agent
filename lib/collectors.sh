@@ -1,6 +1,7 @@
 # shellcheck shell=bash
 # Metric collectors. Each prints tab-separated records consumed by format.awk:
 #   TYPE<TAB>metric<TAB>value[<TAB>dimKey<TAB>dimValue]...
+# Metric keys and units are documented in lib/metrics.tsv.
 
 rec() { local IFS="$TAB"; printf '%s\n' "$*"; }
 
@@ -86,7 +87,7 @@ collect_disk() {
       if (mount != "/" && mount != "/System/Volumes/Data" && mount !~ /^\/Volumes\//) next
       if (mount == "/Volumes/Recovery") next
       cap = $5; sub(/%/, "", cap)
-      d = "mount" OFS mount OFS "device" OFS $1
+      d = "disk.mount" OFS mount OFS "disk.device" OFS $1
       printf "G\tdisk.total\t%.0f\t%s\n", $2 * 1024, d
       printf "G\tdisk.used\t%.0f\t%s\n", $3 * 1024, d
       printf "G\tdisk.free\t%.0f\t%s\n", $4 * 1024, d
@@ -108,13 +109,13 @@ collect_diskio() {
     function emit(dev, s,   rb, wb) {
       rb = get(s, "Bytes (Read)"); wb = get(s, "Bytes (Write)")
       if (rb + wb == 0) return
-      print "C\tdisk.io.read.bytes\t" rb "\tdisk\t" dev
-      print "C\tdisk.io.write.bytes\t" wb "\tdisk\t" dev
-      print "C\tdisk.io.read.ops\t" get(s, "Operations (Read)") "\tdisk\t" dev
-      print "C\tdisk.io.write.ops\t" get(s, "Operations (Write)") "\tdisk\t" dev
-      print "C\tdisk.io.read.time_ns\t" get(s, "Total Time (Read)") "\tdisk\t" dev
-      print "C\tdisk.io.write.time_ns\t" get(s, "Total Time (Write)") "\tdisk\t" dev
-      print "C\tdisk.io.errors\t" get(s, "Errors (Read)") + get(s, "Errors (Write)") "\tdisk\t" dev
+      print "C\tdisk.io.read.bytes\t" rb "\tdisk.device\t" dev
+      print "C\tdisk.io.write.bytes\t" wb "\tdisk.device\t" dev
+      print "C\tdisk.io.read.ops\t" get(s, "Operations (Read)") "\tdisk.device\t" dev
+      print "C\tdisk.io.write.ops\t" get(s, "Operations (Write)") "\tdisk.device\t" dev
+      print "C\tdisk.io.read.time\t" get(s, "Total Time (Read)") "\tdisk.device\t" dev
+      print "C\tdisk.io.write.time\t" get(s, "Total Time (Write)") "\tdisk.device\t" dev
+      print "C\tdisk.io.errors\t" get(s, "Errors (Read)") + get(s, "Errors (Write)") "\tdisk.device\t" dev
     }
     /\+-o IOBlockStorageDriver/ { pend = 1; stats = ""; next }
     pend && stats == "" && /"Statistics" = / { stats = $0; next }
@@ -133,7 +134,7 @@ collect_network() {
       else if (NF == 10) { ip = $4; ie = $5; ib = $6; op = $7; oe = $8; ob = $9 }
       else next
       if (ib + ob == 0 || seen[name]++) next
-      d = "interface" OFS name
+      d = "network.interface" OFS name
       print "C", "net.bytes.in", ib, d
       print "C", "net.bytes.out", ob, d
       print "C", "net.packets.in", ip, d
@@ -180,62 +181,106 @@ collect_system() {
   rec G system.users "$(who 2>/dev/null | wc -l | tr -d ' ')"
 }
 
+# Resolves bundle identifiers for app paths, cached across runs.
+bundle_ids() {
+  local cache="$DTMA_STATE_DIR/bundles.tsv" path id
+  touch "$cache"
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    if ! awk -F "$TAB" -v p="$path" '$1 == p { found = 1 } END { exit !found }' "$cache"; then
+      id="$(plutil -extract CFBundleIdentifier raw -o - "$path/Contents/Info.plist" 2>/dev/null | tr -d '\t\n')"
+      printf '%s\t%s\n' "$path" "$id" >>"$cache"
+    fi
+  done
+  cat "$cache"
+}
+
 collect_processes() {
-  local total procs="$WORK_DIR/procs.tsv" top="$WORK_DIR/top.tsv" pids
+  local total procs="$WORK_DIR/procs.tsv" groups="$WORK_DIR/groups.tsv" apps="$WORK_DIR/apps.tsv"
   total="$(sysctl -n hw.memsize 2>/dev/null)"
-  # pid, user, cpu%, rss bytes, process name, owning .app bundle, full path
-  ps -Aww -o pid=,user=,pcpu=,rss=,comm= 2>/dev/null | awk '
-    BEGIN { OFS = "\t" }
+
+  ps -AM 2>/dev/null | awk '
+    NR > 1 { p = ($0 ~ /^[ \t]/) ? $1 : $2; th[p]++ }
+    END { for (p in th) print p "\t" th[p] }' >"$WORK_DIR/threads.tsv"
+
+  # procs.tsv: pid user cpu rss_bytes threads name app_name app_path exe_path
+  ps -Aww -o pid=,user=,pcpu=,rss=,comm= 2>/dev/null | awk -v tf="$WORK_DIR/threads.tsv" '
+    BEGIN {
+      OFS = "\t"
+      while ((getline l < tf) > 0) { split(l, a, "\t"); th[a[1]] = a[2] }
+    }
     {
       path = $0
       sub(/^ *[0-9]+ +[^ ]+ +[0-9.]+ +[0-9]+ +/, "", path)
       gsub(/\t/, " ", path)
       name = path; sub(/.*\//, "", name)
-      app = ""
-      if (match(path, /\/[^\/]+\.app\//)) app = substr(path, RSTART + 1, RLENGTH - 6)
-      printf "%s\t%s\t%s\t%.0f\t%s\t%s\t%s\n", $1, $2, $3, $4 * 1024, name, app, path
+      app = ""; apath = ""
+      if (match(path, /\/[^\/]+\.app\//)) {
+        app = substr(path, RSTART + 1, RLENGTH - 6)
+        apath = substr(path, 1, RSTART + RLENGTH - 2)
+      }
+      printf "%s\t%s\t%s\t%.0f\t%d\t%s\t%s\t%s\t%s\n", $1, $2, $3, $4 * 1024, th[$1] + 0, name, app, apath, path
     }' >"$procs"
 
+  # Apps: every running .app bundle, helpers summed under the outermost bundle.
   awk -F "$TAB" '
     BEGIN { OFS = "\t" }
-    $6 != "" {
-      a = $6; cpu[a] += $3; mem[a] += $4; n[a]++
-      if ($7 ~ /^\/Applications\// || $7 ~ /^\/System\/Applications\// || $7 ~ /^\/Users\/[^\/]+\/Applications\//) type[a] = "user"
+    $7 != "" {
+      a = $7; cpu[a] += $3; mem[a] += $4; thr[a] += $5; n[a]++
+      if (!(a in path)) path[a] = $8
+      if ($8 ~ /^\/Applications\// || $8 ~ /^\/System\/Applications\// || $8 ~ /^\/Users\/[^\/]+\/Applications\//) type[a] = "user"
       else if (!(a in type)) type[a] = "system"
     }
+    END { for (a in n) print a, path[a], type[a], cpu[a], mem[a], thr[a], n[a] }' "$procs" >"$apps"
+
+  cut -f2 "$apps" | sort -u | bundle_ids >"$WORK_DIR/bundles.tsv"
+  awk -F "$TAB" -v total="${total:-0}" -v bf="$WORK_DIR/bundles.tsv" '
+    BEGIN {
+      OFS = "\t"
+      while ((getline l < bf) > 0) { split(l, b, "\t"); bid[b[1]] = b[2] }
+    }
+    {
+      c++; if ($3 == "user") cu++
+      d = "app.name" OFS $1 OFS "app.bundle.id" OFS bid[$2] OFS "app.type" OFS $3
+      printf "G\tapp.cpu\t%.1f\t%s\n", $4, d
+      printf "G\tapp.memory.rss\t%.0f\t%s\n", $5, d
+      if (total > 0) printf "G\tapp.memory.percent\t%.2f\t%s\n", $5 / total * 100, d
+      print "G", "app.threads", $6, d
+      print "G", "app.processes", $7, d
+    }
     END {
-      for (a in n) {
-        c++; if (type[a] == "user") cu++
-        d = "app.name" OFS a OFS "app.type" OFS type[a]
-        printf "G\tapp.cpu\t%.1f\t%s\n", cpu[a], d
-        printf "G\tapp.memory.rss\t%.0f\t%s\n", mem[a], d
-        print "G", "app.processes", n[a], d
-      }
       print "G", "apps.running", c + 0
       print "G", "apps.running.user", cu + 0
-    }' "$procs"
+    }' "$apps"
+
+  # Processes grouped by executable + owner, so helpers with many PIDs form one stable series.
+  awk -F "$TAB" '
+    BEGIN { OFS = "\t" }
+    {
+      k = $6 SUBSEP $2 SUBSEP $7
+      cpu[k] += $3; mem[k] += $4; thr[k] += $5; n[k]++
+      if (!(k in path)) path[k] = $9
+    }
+    END {
+      for (k in n) {
+        split(k, p, SUBSEP)
+        printf "%s\t%s\t%s\t%s\t%.1f\t%.0f\t%d\t%d\n", p[1], p[2], p[3], path[k], cpu[k], mem[k], thr[k], n[k]
+      }
+    }' "$procs" >"$groups"
 
   {
-    sort -t "$TAB" -k3,3nr "$procs" | head -n "$TOP_N" | awk -v by=cpu '{ print by "\t" NR "\t" $0 }'
-    sort -t "$TAB" -k4,4nr "$procs" | head -n "$TOP_N" | awk -v by=memory '{ print by "\t" NR "\t" $0 }'
-  } >"$top"
-
-  pids="$(cut -f3 "$top" | sort -u | paste -sd, -)"
-  [ -n "$pids" ] || return 0
-  ps -M -p "$pids" 2>/dev/null | awk '
-    NR > 1 { p = ($0 ~ /^[ \t]/) ? $1 : $2; th[p]++ }
-    END { for (p in th) print p "\t" th[p] }' >"$WORK_DIR/threads.tsv"
-
-  awk -F "$TAB" -v total="${total:-0}" '
+    sort -t "$TAB" -k5,5nr "$groups" | head -n "$TOP_N"
+    sort -t "$TAB" -k6,6nr "$groups" | head -n "$TOP_N"
+  } | sort -u | awk -F "$TAB" -v total="${total:-0}" '
     BEGIN { OFS = "\t" }
-    FILENAME == ARGV[1] { th[$1] = $2; next }
     {
-      d = "top.by" OFS $1 OFS "rank" OFS $2 OFS "process.name" OFS $7 OFS "pid" OFS $3 OFS "user" OFS $4 OFS "app.name" OFS $8
+      d = "process.executable.name" OFS $1 OFS "process.owner" OFS $2 OFS "app.name" OFS $3 OFS "process.executable.path" OFS $4
       print "G", "process.cpu", $5, d
       print "G", "process.memory.rss", $6, d
       if (total > 0) printf "G\tprocess.memory.percent\t%.2f\t%s\n", $6 / total * 100, d
-      if ($3 in th) print "G", "process.threads", th[$3], d
-    }' "$WORK_DIR/threads.tsv" "$top"
+      print "G", "process.threads", $7, d
+      print "G", "process.instances", $8, d
+    }'
 }
 
 collect_agent() {

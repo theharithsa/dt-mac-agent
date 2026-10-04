@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate plists
-        run: plutil -lint launchd/*.plist
+        run: for f in launchd/*.plist.in; do sed 's#@PREFIX@#/usr/local/dt-mac-agent#g' "$f" > /tmp/t.plist && plutil -lint /tmp/t.plist; done
       - name: Collect once
         run: |
           bash bin/dt-mac-agent --dry-run | tee out.txt
@@ -27,4 +27,11 @@ jobs:
           test "$lines" -gt 40
           grep -q '^macos.cpu.usage,' out.txt
           grep -q '^macos.memory.used,' out.txt
-          grep -q '^macos.process.cpu,top.by="cpu",rank="1"' out.txt
+          grep -q '^macos.process.cpu,process.executable.name=' out.txt
+          grep -q '^macos.app.memory.rss,app.name=' out.txt
+      - name: Every emitted metric is in the catalog
+        run: |
+          cut -d, -f1 out.txt | cut -d' ' -f1 | sed 's/^macos\.//' | sort -u > emitted.txt
+          grep -v '^#' lib/metrics.tsv | cut -f1 | sort -u > catalog.txt
+          missing=$(comm -23 emitted.txt catalog.txt)
+          if [ -n "$missing" ]; then echo "not in lib/metrics.tsv: $missing"; exit 1; fi

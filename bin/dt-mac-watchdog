@@ -1,12 +1,15 @@
 #!/bin/bash
-# dt-mac-watchdog: run by launchd every 60s; restarts the agent if it is unloaded, stopped or hung.
+# dt-mac-watchdog: run by launchd every 60s. Restarts the agent if it is unloaded, stopped or hung,
+# and checks GitHub for a new release once a day (AUTO_UPDATE=1).
 set -u
 umask 077
 
-_self="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)"
-if [ -z "${DTMA_HOME:-}" ]; then
-  if [ -f "$_self/lib/common.sh" ]; then DTMA_HOME="$_self"; else DTMA_HOME="/usr/local/dt-mac-agent"; fi
-fi
+_src="${BASH_SOURCE[0]}"
+while [ -L "$_src" ]; do
+  _t="$(readlink "$_src")"
+  case "$_t" in /*) _src="$_t" ;; *) _src="$(dirname "$_src")/$_t" ;; esac
+done
+DTMA_HOME="${DTMA_HOME:-$(cd "$(dirname "$_src")/.." && pwd)}"
 # shellcheck source=/dev/null
 . "$DTMA_HOME/lib/common.sh"
 
@@ -20,32 +23,57 @@ if [ -f "$DTMA_STATE_DIR/stopped" ]; then
   exit 0
 fi
 
-plist="$DTMA_PLIST_DIR/$DTMA_LABEL.plist"
-max_age=$((INTERVAL * 3))
-
-if ! job_loaded "$DTMA_LABEL"; then
-  log WARN "agent job not loaded; bootstrapping"
-  launchctl enable "system/$DTMA_LABEL"
-  if launchctl bootstrap system "$plist" 2>/dev/null; then
-    bump_count watchdog_restarts
-  else
-    log ERROR "failed to bootstrap $plist"
+check_agent() {
+  local plist="$DTMA_PLIST_DIR/$DTMA_LABEL.plist" max_age=$((INTERVAL * 3)) state hb age
+  if ! job_loaded "$DTMA_LABEL"; then
+    log WARN "agent job not loaded; bootstrapping"
+    launchctl enable "system/$DTMA_LABEL"
+    if launchctl bootstrap system "$plist" 2>/dev/null; then
+      bump_count watchdog_restarts
+    else
+      log ERROR "failed to bootstrap $plist"
+    fi
+    return
   fi
-  exit 0
-fi
+  state="$(job_field "$DTMA_LABEL" state)"
+  hb="$(cat "$DTMA_STATE_DIR/heartbeat" 2>/dev/null || echo 0)"
+  case "$hb" in ''|*[!0-9]*) hb=0 ;; esac
+  age=$(($(date +%s) - hb))
+  if [ "$state" != "running" ]; then
+    log WARN "agent state is '${state:-unknown}'; kickstarting"
+    launchctl kickstart "system/$DTMA_LABEL" && bump_count watchdog_restarts
+  elif [ "$age" -gt "$max_age" ]; then
+    log WARN "agent heartbeat is ${age}s old (max ${max_age}s); restarting"
+    launchctl kickstart -k "system/$DTMA_LABEL" && bump_count watchdog_restarts
+  else
+    log INFO "ok: agent running (pid $(job_field "$DTMA_LABEL" pid)), heartbeat ${age}s ago, restarts so far $(read_count watchdog_restarts)"
+  fi
+}
 
-state="$(job_field "$DTMA_LABEL" state)"
-hb="$(cat "$DTMA_STATE_DIR/heartbeat" 2>/dev/null || echo 0)"
-case "$hb" in ''|*[!0-9]*) hb=0 ;; esac
-age=$(($(date +%s) - hb))
+check_update() {
+  local stamp="$DTMA_STATE_DIR/update.checked" now last latest
+  [ "$AUTO_UPDATE" = "1" ] || return 0
+  now="$(date +%s)"
+  last="$(cat "$stamp" 2>/dev/null || echo 0)"
+  case "$last" in ''|*[!0-9]*) last=0 ;; esac
+  [ $((now - last)) -ge 86400 ] || return 0
+  echo "$now" >"$stamp"
+  latest="$(latest_version)"
+  if [ -z "$latest" ]; then
+    log WARN "update: could not reach GitHub; will retry in 24h"
+  elif version_gt "$latest" "$DTMA_VERSION"; then
+    log INFO "update: new release $latest available (installed $DTMA_VERSION); installing"
+    # On success the installer may reload this watchdog job, ending this process.
+    if run_update "$latest"; then
+      log INFO "update: installed $latest"
+    else
+      log ERROR "update: installing $latest failed; see install.log"
+    fi
+  else
+    log INFO "update: up to date ($DTMA_VERSION)"
+  fi
+}
 
-if [ "$state" != "running" ]; then
-  log WARN "agent state is '${state:-unknown}'; kickstarting"
-  launchctl kickstart "system/$DTMA_LABEL" && bump_count watchdog_restarts
-elif [ "$age" -gt "$max_age" ]; then
-  log WARN "agent heartbeat is ${age}s old (max ${max_age}s); restarting"
-  launchctl kickstart -k "system/$DTMA_LABEL" && bump_count watchdog_restarts
-else
-  log INFO "ok: agent running (pid $(job_field "$DTMA_LABEL" pid)), heartbeat ${age}s ago, restarts so far $(read_count watchdog_restarts)"
-fi
+check_agent
+check_update
 exit 0

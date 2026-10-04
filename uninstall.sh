@@ -8,6 +8,13 @@ KEEP_CONFIG=0
 [ "${1:-}" = "--keep-config" ] && KEEP_CONFIG=1
 [ "$(id -u)" -eq 0 ] || { echo "error: run as root (sudo)" >&2; exit 1; }
 
+AGENT_PLIST="/Library/LaunchDaemons/com.theharithsa.dt-mac-agent.plist"
+prefix=""
+if [ -f "$AGENT_PLIST" ]; then
+  prefix="$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:1' "$AGENT_PLIST" 2>/dev/null | sed 's#/bin/dt-mac-agent$##')"
+fi
+prefix="${prefix:-/usr/local/dt-mac-agent}"
+
 # Prevent the agent and watchdog from reviving each other during removal.
 mkdir -p /var/lib/dt-mac-agent && touch /var/lib/dt-mac-agent/stopped
 
@@ -17,12 +24,16 @@ for l in com.theharithsa.dt-mac-agent.watchdog com.theharithsa.dt-mac-agent; do
   rm -f "/Library/LaunchDaemons/$l.plist"
 done
 
+# Only delete the program directory if it is really ours.
+if [ -f "$prefix/bin/dt-mac-agent" ] && [ -f "$prefix/VERSION" ]; then
+  rm -rf "$prefix"
+fi
 [ -L /usr/local/bin/dtmacctl ] && rm -f /usr/local/bin/dtmacctl
 rm -f /etc/newsyslog.d/dt-mac-agent.conf
-rm -rf /usr/local/dt-mac-agent /var/lib/dt-mac-agent /var/log/dt-mac-agent /Library/Logs/dt-mac-agent
+rm -rf /var/lib/dt-mac-agent /var/log/dt-mac-agent /Library/Logs/dt-mac-agent
 if [ "$KEEP_CONFIG" -eq 1 ]; then
   echo "kept /etc/dt-mac-agent/config"
 else
   rm -rf /etc/dt-mac-agent
 fi
-echo "dt-mac-agent removed"
+echo "dt-mac-agent removed from $prefix"

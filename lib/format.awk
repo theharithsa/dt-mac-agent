@@ -12,7 +12,7 @@ function q(s) {
 
 BEGIN {
   FS = "\t"
-  common = ",host.name=" q(host) ",os.version=" q(osver) ",hw.model=" q(model) ",arch=" q(arch)
+  common = ",host.name=" q(host) ",host.arch=" q(arch) ",host.model=" q(model) ",os.type=\"macos\",os.version=" q(osver)
   if (statefile != "") {
     while ((getline line < statefile) > 0) {
       split(line, p, "\t")

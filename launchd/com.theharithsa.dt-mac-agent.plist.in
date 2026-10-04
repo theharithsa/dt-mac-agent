@@ -7,7 +7,7 @@
 	<key>ProgramArguments</key>
 	<array>
 		<string>/bin/bash</string>
-		<string>/usr/local/dt-mac-agent/bin/dt-mac-agent</string>
+		<string>@PREFIX@/bin/dt-mac-agent</string>
 	</array>
 	<key>RunAtLoad</key>
 	<true/>

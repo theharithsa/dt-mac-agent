@@ -3,17 +3,25 @@
 
 # Dynatrace environment URL and token.
 #   Platform token (dt0s16.*) needs permission: openpipeline:metrics:ingest
-#   Classic API token (dt0c01.*) needs scope: metrics.ingest
+#   (plus log ingest permission when SEND_LOGS=1)
+#   Classic API token (dt0c01.*) needs scopes: metrics.ingest (and logs.ingest when SEND_LOGS=1)
 DT_ENV_URL="https://<your-environment-id>.apps.dynatrace.com"
 DT_TOKEN="<token>"
 
-# Optional: full ingest endpoint override (e.g. Managed or ActiveGate).
+# Optional: full endpoint overrides (e.g. Managed or ActiveGate).
 # DT_INGEST_URL="https://<activegate>:9999/e/<env-id>/api/v2/metrics/ingest"
+# DT_LOGS_URL="https://<activegate>:9999/e/<env-id>/api/v2/logs/ingest"
+
+# 1 = also send the agent's own logs (agent, ingest, watchdog, install) to Dynatrace.
+SEND_LOGS=0
+
+# 1 = the watchdog checks GitHub once a day and installs new releases automatically.
+AUTO_UPDATE=1
 
 # Metric key prefix, e.g. macos.cpu.usage
 METRIC_PREFIX="macos"
 
-# Number of top processes reported by CPU and by memory.
+# Number of top process groups reported by CPU and by memory (union of both lists).
 TOP_N=10
 
 # Collection interval in seconds.
