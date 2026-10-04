@@ -9,6 +9,8 @@
 #   DTMA_PREFIX        install location (default: /usr/local/dt-mac-agent)
 #   DTMA_SEND_LOGS     1 = also send the agent's own logs to Dynatrace (default: 0)
 #   DTMA_AUTO_UPDATE   1 = install new releases automatically, checked daily (default: 1)
+#   DTMA_DASHBOARD     1 = upload the 'MacOS Health Center' dashboard (default: asked; 0 when unattended)
+#   DTMA_DASHBOARD_TOKEN  platform token (dt0s16.*) with document:documents:write for the upload; not stored
 #   DTMA_VERSION       release to install (default: latest)
 #   DTMA_SKIP_TEST     1 = skip the connection test
 set -euo pipefail
@@ -161,6 +163,24 @@ if [ -z "$AUTO_UPDATE" ]; then
     fi
   fi
 fi
+
+# Dashboard upload (Document API) needs a platform token; a classic API token cannot be used.
+DASHBOARD="${DTMA_DASHBOARD:-}"
+DASH_TOKEN="${DTMA_DASHBOARD_TOKEN:-}"
+eff_token="${DT_TOKEN:-$(conf_get DT_TOKEN || true)}"
+case "$eff_token" in dt0s16.*) DASH_TOKEN="${DASH_TOKEN:-$eff_token}" ;; esac
+if [ -z "$DASHBOARD" ] && [ "$INTERACTIVE" = "1" ] && [ -d "$SRC/Dashboard" ]; then
+  # Default yes on first install, no on upgrades so edits made in Dynatrace are not overwritten.
+  if [ -f "$CONF" ]; then dash_default=0; else dash_default=1; fi
+  yes_no "Upload the '$(ls "$SRC/Dashboard" | head -n 1 | sed 's/\.json$//')' dashboard to Dynatrace?" "$dash_default"
+  DASHBOARD="$ANSWER"
+  if [ "$DASHBOARD" = "1" ] && [ -z "$DASH_TOKEN" ]; then
+    ask "Platform token (dt0s16.) with document:documents:write, used once and not stored (input hidden, Enter to skip): " "" 1
+    DASH_TOKEN="$ANSWER"
+    [ -n "$DASH_TOKEN" ] || DASHBOARD=0
+  fi
+fi
+DASHBOARD="${DASHBOARD:-0}"
 [ "$INTERACTIVE" = "1" ] && exec 3<&-
 
 # --- 3. Validate (the config is sourced by root and the program runs as root) ---
@@ -213,10 +233,16 @@ mkdir -p "$PREFIX" "$CONF_DIR" "$STATE_DIR" /usr/local/bin /etc/newsyslog.d
 rm -rf "${PREFIX:?}/bin" "${PREFIX:?}/lib"
 cp -R "$SRC/bin" "$SRC/lib" "$PREFIX/"
 cp "$SRC/VERSION" "$SRC/uninstall.sh" "$PREFIX/"
+rm -rf "${PREFIX:?}/dashboards"
+if [ -d "$SRC/Dashboard" ]; then
+  mkdir -p "$PREFIX/dashboards"
+  cp "$SRC/Dashboard/"*.json "$PREFIX/dashboards/macos-health-center.json"
+fi
 touch "$PREFIX/.dt-mac-agent"
 chown -R root:wheel "$PREFIX"
 chmod 755 "$PREFIX" "$PREFIX/bin" "$PREFIX/lib" "$PREFIX"/bin/* "$PREFIX/uninstall.sh"
 chmod 644 "$PREFIX"/lib/* "$PREFIX/VERSION" "$PREFIX/.dt-mac-agent"
+if [ -d "$PREFIX/dashboards" ]; then chmod 755 "$PREFIX/dashboards"; chmod 644 "$PREFIX"/dashboards/*; fi
 ln -sf "$PREFIX/bin/dtmacctl" /usr/local/bin/dtmacctl
 
 chown root:wheel "$CONF_DIR" "$STATE_DIR"
@@ -312,6 +338,19 @@ if [ "$SEND_LOGS" = "1" ]; then
   esac
 fi
 
+# --- 11. Optional dashboard upload ---
+dash_line=""
+if [ "$DASHBOARD" = "1" ]; then
+  say "Uploading the dashboard to Dynatrace"
+  if dash_out="$(DTMA_DASHBOARD_TOKEN="$DASH_TOKEN" "$PREFIX/bin/dtmacctl" dashboard 2>&1 </dev/null)"; then
+    say "$dash_out"
+    dash_line="  Dashboard: ${dash_out##*: }"
+  else
+    warn "$dash_out (the agent is unaffected; retry later with 'sudo dtmacctl dashboard')"
+  fi
+fi
+unset DASH_TOKEN eff_token
+
 say "dt-mac-agent $VERSION installed and running from $PREFIX"
 if [ "$UPDATE" = "1" ]; then
   if [ "$reload_wd" = "1" ]; then
@@ -329,6 +368,7 @@ cat <<EOF
   Metrics : dtmacctl metrics
   Update  : sudo dtmacctl update          (automatic daily check: $([ "$AUTO_UPDATE" = 1 ] && echo on || echo off))
   Remove  : sudo dtmacctl uninstall
+$dash_line
 
 Metrics appear in Dynatrace under '$(conf_get METRIC_PREFIX || echo macos).*' within ~2 minutes.
 EOF

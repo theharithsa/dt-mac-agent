@@ -247,6 +247,9 @@ on the next watchdog run.
 | `install location ... is not allowed` / `parent directory ... must be owned by root` | The program runs as root, so it must live in a root-owned path. Use `/usr/local/dt-mac-agent` or `/opt/dt-mac-agent` |
 | `... already exists and is not empty` | Choose a dedicated, empty directory |
 | Want to see what happened | `dtmacctl logs install` (also contains automatic updates) |
+| `Dashboard upload failed (HTTP 401/403)` | The dashboard needs a **platform token** (`dt0s16.`) with `document:documents:write`; classic API tokens cannot upload dashboards. Retry with `sudo dtmacctl dashboard` |
+| `Dashboard upload failed (HTTP 409)` | Someone edited the dashboard at the same moment. Run `sudo dtmacctl dashboard` again |
+| Dashboard edits disappeared | Re-uploading (installer or `dtmacctl dashboard`) overwrites the dashboard. Duplicate it in Dynatrace before customizing |
 
 To debug the installer step by step:
 

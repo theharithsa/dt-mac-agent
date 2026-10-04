@@ -268,6 +268,33 @@ ship_logs() {
   esac
 }
 
+DTMA_DASHBOARD_ID="dt-mac-agent-health-center"
+DTMA_DASHBOARD_NAME="MacOS Health Center"
+
+# upload_dashboard FILE PLATFORM_TOKEN: creates or updates the dashboard (fixed id) via the Document API.
+upload_dashboard() {
+  local file="$1" token="$2" base resp="$WORK_DIR/dashboard.out" ver
+  base="$(printf '%s' "$DT_ENV_URL" | sed 's#\.live\.dynatrace\.com#.apps.dynatrace.com#')"
+  DASHBOARD_URL="$base/ui/apps/dynatrace.dashboards/dashboard/$DTMA_DASHBOARD_ID"
+  base="$base/platform/document/v1/documents"
+  HTTP_CODE="$(printf 'header = "Authorization: Bearer %s"\n' "$token" | curl -sS -K - -o "$resp" -w '%{http_code}' \
+    --max-time 30 "$base/$DTMA_DASHBOARD_ID/metadata" 2>/dev/null)" || HTTP_CODE=000
+  if [ "$HTTP_CODE" = "200" ]; then
+    ver="$(sed -n 's/.*"version":\([0-9]*\).*/\1/p' "$resp" | head -n 1)"
+    HTTP_CODE="$(printf 'header = "Authorization: Bearer %s"\n' "$token" | curl -sS -K - -o "$resp" -w '%{http_code}' \
+      --max-time 60 -X PATCH -F "name=$DTMA_DASHBOARD_NAME" -F "content=@$file;type=application/json" \
+      "$base/$DTMA_DASHBOARD_ID?optimistic-locking-version=$ver" 2>/dev/null)" || HTTP_CODE=000
+    DASHBOARD_ACTION="updated"
+  elif [ "$HTTP_CODE" = "404" ]; then
+    HTTP_CODE="$(printf 'header = "Authorization: Bearer %s"\n' "$token" | curl -sS -K - -o "$resp" -w '%{http_code}' \
+      --max-time 60 -F "id=$DTMA_DASHBOARD_ID" -F "name=$DTMA_DASHBOARD_NAME" -F 'type=dashboard' -F 'isPrivate=false' \
+      -F "content=@$file;type=application/json" "$base" 2>/dev/null)" || HTTP_CODE=000
+    DASHBOARD_ACTION="created"
+  fi
+  HTTP_DETAIL="$(head -c 300 "$resp" 2>/dev/null | tr '\n' ' ')"
+  case "$HTTP_CODE" in 200|201) return 0 ;; *) return 1 ;; esac
+}
+
 latest_version() {
   curl -fsSL --max-time 20 "https://api.github.com/repos/$DTMA_REPO/releases/latest" 2>/dev/null |
     sed -n 's/.*"tag_name": *"v\{0,1\}\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)".*/\1/p' | head -n 1

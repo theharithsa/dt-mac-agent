@@ -29,6 +29,7 @@ Usage: sudo dtmacctl <command>
   send-test     send a single test metric to Dynatrace
   update [--check]
                 install the latest GitHub release now (--check: only report)
+  dashboard     upload/refresh the 'MacOS Health Center' dashboard (needs a platform token)
   config        show the configuration (token masked)
   version       print version
   uninstall [--keep-config]
@@ -83,6 +84,35 @@ cmd_status() {
   if resolve_ingest 2>/dev/null; then printf '  %-10s: %s\n' endpoint "$INGEST_URL"; fi
   printf '  %-10s: %s\n' home "$DTMA_HOME"
   printf '  %-10s: %s\n' logs "$DTMA_LOG_DIR"
+}
+
+cmd_dashboard() {
+  local file="$DTMA_HOME/dashboards/macos-health-center.json" token="${DTMA_DASHBOARD_TOKEN:-}"
+  need_root dashboard
+  load_config
+  [ -f "$file" ] || { echo "dashboard file not found: $file" >&2; exit 1; }
+  case "$DT_TOKEN" in dt0s16.*) token="${token:-$DT_TOKEN}" ;; esac
+  if [ -z "$token" ]; then
+    # Classic API tokens cannot use the Document API; the platform token is used once and not stored.
+    if (exec </dev/tty) 2>/dev/null; then
+      printf 'Platform token (dt0s16.) with document:documents:write, used once and not stored (input hidden): ' >/dev/tty
+      read -r -s token </dev/tty || true
+      printf '\n' >/dev/tty
+    fi
+  fi
+  case "$token" in
+    dt0s16.*) ;;
+    *) echo "a platform token (dt0s16.*) with document:documents:write is required; pass it via DTMA_DASHBOARD_TOKEN or the prompt" >&2; exit 1 ;;
+  esac
+  WORK_DIR="$(mktemp -d /tmp/dt-mac-agent-dash.XXXXXX)"
+  if upload_dashboard "$file" "$token"; then
+    echo "Dashboard '$DTMA_DASHBOARD_NAME' $DASHBOARD_ACTION: $DASHBOARD_URL"
+    rm -rf "$WORK_DIR"
+  else
+    echo "Dashboard upload failed (HTTP $HTTP_CODE): $HTTP_DETAIL" >&2
+    rm -rf "$WORK_DIR"
+    exit 1
+  fi
 }
 
 cmd_update() {
@@ -172,6 +202,7 @@ case "$cmd" in
     awk -F "$TAB" -v p="$METRIC_PREFIX" '!/^#/ && NF >= 5 { printf "%-38s %-6s %-12s %s\n", p "." $1, $2, $3, $5 }' "$DTMA_HOME/lib/metrics.tsv"
     ;;
   update) cmd_update "$@" ;;
+  dashboard) cmd_dashboard ;;
   test) exec /bin/bash "$DTMA_HOME/bin/dt-mac-agent" --dry-run ;;
   send-test) cmd_send_test ;;
   config)

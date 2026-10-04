@@ -30,6 +30,10 @@ A classic **API token** (`dt0c01.`) is recommended. Create it under *Access toke
 A platform token (`dt0s16.`) also works. It needs `openpipeline:metrics:ingest`, plus `settings:objects:write`
 (recommended) and log ingest permission when `SEND_LOGS=1`.
 
+**Dashboard upload (optional):** dashboards are stored through the Document API, which only accepts **platform
+tokens** (`dt0s16.`) with `document:documents:write`. If the agent itself uses a platform token, that token is
+used. Otherwise the installer asks for one, uses it once and does not save it.
+
 Without the settings scope, metrics still flow and the agent falls back to sending only name, description and unit.
 In that case dimensions are not listed in the metric definition. If a scope is missing, Dynatrace answers
 `HTTP 403 ... missing required permission`. The error shows in the installer's connection test and in
@@ -50,6 +54,8 @@ The installer asks for:
 | Dynatrace token (hidden input) | — | `DT_TOKEN` |
 | Also send the agent's own logs to Dynatrace? | No | `DTMA_SEND_LOGS=1` |
 | Install new releases automatically (daily check)? | Yes | `DTMA_AUTO_UPDATE=0` to disable |
+| Upload the *MacOS Health Center* dashboard? | Yes on first install, No on upgrades | `DTMA_DASHBOARD=1` |
+| Platform token for the dashboard upload (hidden, used once, **not stored**) | — | `DTMA_DASHBOARD_TOKEN` |
 
 Unattended example (MDM / scripts):
 
@@ -108,6 +114,7 @@ The watchdog shows `not running` between its 60-second runs. That is expected.
 | `sudo dtmacctl start` / `stop` | Start / stop agent + watchdog (`stop` survives reboots until `start`) |
 | `sudo dtmacctl restart` | Restart the agent |
 | `sudo dtmacctl update [--check]` | Install the latest release now (`--check` only reports) |
+| `sudo dtmacctl dashboard` | Upload or refresh the *MacOS Health Center* dashboard (asks for a platform token if needed) |
 | `dtmacctl logs [agent\|ingest\|watchdog\|install] [-f]` | Show / follow logs (default: all) |
 | `dtmacctl payload` | Print the last metric batch sent to Dynatrace |
 | `dtmacctl metrics` | List all metrics with type, unit and description |
@@ -284,6 +291,22 @@ bundle, so Chrome, Teams, VS Code and similar apps report their full footprint.
 | `macos.agent.watchdog.restarts.count` | Count | Agent watchdog restarts | Agent restarts triggered by the watchdog during the interval. |
 
 The source of truth is [lib/metrics.tsv](lib/metrics.tsv). CI fails if the agent emits a metric that is missing there.
+
+---
+
+## Dashboard
+
+[Dashboard/MacOS Health Center.json](Dashboard/MacOS%20Health%20Center.json) is a ready-made Dynatrace dashboard.
+It covers CPU, memory, swap and disk per Mac, with a *Mac / Computer Name* filter.
+
+- **During installation**: answer *Yes* to the dashboard prompt (or set `DTMA_DASHBOARD=1` and
+  `DTMA_DASHBOARD_TOKEN=<platform token>`). The installer prints the dashboard link.
+- **Later**: `sudo dtmacctl dashboard`.
+- The dashboard always gets the same ID (`dt-mac-agent-health-center`) and is shared with the environment.
+  Uploading again updates it in place instead of creating a copy, and **overwrites edits made in Dynatrace**.
+  Save a copy (*Duplicate*) before customizing.
+- Link: `https://<env-id>.apps.dynatrace.com/ui/apps/dynatrace.dashboards/dashboard/dt-mac-agent-health-center`
+- Manual alternative: in Dynatrace *Dashboards* → *Upload*, then select the JSON file.
 
 ---
 

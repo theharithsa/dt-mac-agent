@@ -22,7 +22,7 @@ jobs:
           [ "$V" = "$(cat VERSION)" ] || { echo "tag $GITHUB_REF_NAME does not match VERSION $(cat VERSION)"; exit 1; }
           D="dt-mac-agent-$V"
           mkdir -p "dist/$D"
-          cp -R bin lib launchd etc install.sh uninstall.sh VERSION README.md CHANGELOG.md LICENSE "dist/$D/"
+          cp -R bin lib launchd etc Dashboard install.sh uninstall.sh VERSION README.md CHANGELOG.md troubleshooting.md LICENSE "dist/$D/"
           tar -C dist -czf "dist/$D.tar.gz" "$D"
           (cd dist && sha256sum "$D.tar.gz" > "$D.tar.gz.sha256")
           awk -v v="$V" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md > dist/notes.md

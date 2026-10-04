@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.4] - 2026-10-05
+
+### Added
+
+- *MacOS Health Center* dashboard (`Dashboard/`) shipped with the agent and installed under `<prefix>/dashboards/`.
+- Installer can upload the dashboard to Dynatrace (prompt, or `DTMA_DASHBOARD=1` + `DTMA_DASHBOARD_TOKEN`).
+  It uses the Document API with a fixed ID (`dt-mac-agent-health-center`), so re-uploads update in place.
+  Requires a platform token with `document:documents:write`. The token is used once and never stored.
+- `sudo dtmacctl dashboard` to upload or refresh the dashboard at any time.
+- Troubleshooting guide entries for dashboard upload.
+
 ## [0.1.3] - 2026-10-05
 
 ### Changed
@@ -88,6 +99,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Log rotation via `newsyslog`.
 - CI (shellcheck + macOS dry-run) and tag-based GitHub release workflow.
 
+[0.1.4]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.1.4
 [0.1.3]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.1.3
 [0.1.2]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.1.2
 [0.1.1]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.1.1
