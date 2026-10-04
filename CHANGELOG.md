@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-10-05
+
+### Added
+
+- Installer verifies end-to-end connectivity after starting the agent: it waits for the first real metric batch,
+  reports `Successfully connected to Dynatrace environment <url>`, and only then prints the success summary.
+  If log shipping is enabled, the first log upload is verified as well. Fails with a clear error if Dynatrace rejects the batch.
+
 ## [0.1.0] - 2026-10-05
 
 ### Added
@@ -62,6 +70,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Log rotation via `newsyslog`.
 - CI (shellcheck + macOS dry-run) and tag-based GitHub release workflow.
 
+[0.1.1]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.1.1
 [0.1.0]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.1.0
 [0.0.2]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.0.2
 [0.0.1]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.0.1

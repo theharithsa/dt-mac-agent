@@ -58,6 +58,8 @@ The installer:
 3. Writes `/etc/dt-mac-agent/config` (`root:wheel`, mode `600`).
 4. Sends a test metric. **If Dynatrace rejects it, the agent is not started.**
 5. Loads the agent and watchdog `launchd` daemons.
+6. Waits for the agent's first real metric batch and reports `Successfully connected to Dynatrace environment <url>`
+   (and verifies log shipping when enabled) before printing the final success message.
 
 The install location must be a dedicated directory and every parent directory must be owned by root
 (the program runs as root). Paths under `/Users`, `/tmp`, `/var` and system folders are refused.

@@ -274,9 +274,42 @@ bootstrap() {
   done
   return 1
 }
+rm -f "$STATE_DIR/last_status" "$STATE_DIR/logship.status"
 bootstrap "$AGENT_LABEL" || die "failed to load launchd job $AGENT_LABEL"
 if [ "$UPDATE" != "1" ]; then
   bootstrap "$WD_LABEL" || die "failed to load launchd job $WD_LABEL"
+fi
+
+# --- 10. Verify the running agent really reaches Dynatrace ---
+env_url="$(conf_get DT_ENV_URL || true)"
+say "Verifying connectivity: waiting for the agent's first metric batch to reach $env_url"
+st=""
+for _ in $(seq 1 60); do
+  st="$(cat "$STATE_DIR/last_status" 2>/dev/null || true)"
+  [ -n "$st" ] && break
+  sleep 1
+done
+[ -n "$st" ] || die "the agent did not send its first batch within 60s; check 'dtmacctl logs agent'"
+batch_lines="$(echo "$st" | awk '{print $2}')"
+batch_status="$(echo "$st" | cut -d' ' -f3-)"
+case "$batch_status" in
+  ok*) say "Successfully connected to Dynatrace environment $env_url (first batch: $batch_lines metric lines, HTTP ${batch_status#ok })" ;;
+  partial*) warn "Connected to Dynatrace environment $env_url, but some metric lines were rejected; see 'dtmacctl logs ingest'" ;;
+  *) die "the agent is running but Dynatrace rejected its first batch ($batch_status); see 'dtmacctl logs agent'" ;;
+esac
+
+if [ "$SEND_LOGS" = "1" ]; then
+  ls_status=""
+  for _ in $(seq 1 15); do
+    ls_status="$(cat "$STATE_DIR/logship.status" 2>/dev/null || true)"
+    [ -n "$ls_status" ] && break
+    sleep 1
+  done
+  case "$ls_status" in
+    ok) say "Log shipping to Dynatrace verified" ;;
+    "") warn "Log shipping not confirmed yet; check 'sudo dtmacctl status' in a minute" ;;
+    *) warn "Log shipping to Dynatrace failed (HTTP $ls_status): the token may lack log ingest permission; see 'dtmacctl logs agent'" ;;
+  esac
 fi
 
 say "dt-mac-agent $VERSION installed and running from $PREFIX"
