@@ -172,7 +172,9 @@ case "$eff_token" in dt0s16.*) DASH_TOKEN="${DASH_TOKEN:-$eff_token}" ;; esac
 if [ -z "$DASHBOARD" ] && [ "$INTERACTIVE" = "1" ] && [ -d "$SRC/Dashboard" ]; then
   # Default yes on first install, no on upgrades so edits made in Dynatrace are not overwritten.
   if [ -f "$CONF" ]; then dash_default=0; else dash_default=1; fi
-  yes_no "Upload the '$(ls "$SRC/Dashboard" | head -n 1 | sed 's/\.json$//')' dashboard to Dynatrace?" "$dash_default"
+  dash_file="$(find "$SRC/Dashboard" -name '*.json' | head -n 1)"
+  dash_name="$(basename "$dash_file" .json)"
+  yes_no "Upload the '$dash_name' dashboard to Dynatrace?" "$dash_default"
   DASHBOARD="$ANSWER"
   if [ "$DASHBOARD" = "1" ] && [ -z "$DASH_TOKEN" ]; then
     ask "Platform token (dt0s16.) with document:documents:write, used once and not stored (input hidden, Enter to skip): " "" 1
