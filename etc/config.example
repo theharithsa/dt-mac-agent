@@ -2,10 +2,13 @@
 # This file is sourced by bash; keep the KEY="value" format.
 
 # Dynatrace environment URL and token.
-#   Platform token (dt0s16.*) needs permission: openpipeline:metrics:ingest
-#   (recommended: settings:objects:write to declare metric dimensions; log ingest permission when SEND_LOGS=1)
-#   Classic API token (dt0c01.*) needs scopes: metrics.ingest
-#   (recommended: settings.write; logs.ingest when SEND_LOGS=1)
+#   Recommended: one platform token (dt0s16.*, sent as Bearer) with
+#     openpipeline:metrics:ingest            (required)
+#     settings:objects:write                 (recommended: metric dimensions)
+#     openpipeline:logs:ingest               (when SEND_LOGS=1)
+#     document:documents:read/write          (dashboard upload)
+#   The token owner's IAM policies must allow the same permissions.
+#   Alternative: classic API token (dt0c01.*) with metrics.ingest, settings.write, logs.ingest.
 DT_ENV_URL="https://<your-environment-id>.live.dynatrace.com"
 DT_TOKEN="<token>"
 

@@ -50,6 +50,20 @@ like this in `ingest.log`:
 | `metadata: Settings API not usable (HTTP 403)` | Token lacks `settings.write` (API) / `settings:objects:write` (platform) | Add the scope. Metrics still flow, but dimensions are not listed in metric definitions |
 | `log shipping failed (HTTP 403)` | Token lacks `logs.ingest` | Add the scope, or set `SEND_LOGS=0` |
 
+Required scopes for a **platform token** (`dt0s16.`, recommended; one token covers everything):
+
+| Scope | Required? |
+|---|---|
+| `openpipeline:metrics:ingest` | Required |
+| `settings:objects:write` | Recommended (metric definitions with dimensions) |
+| `openpipeline:logs:ingest` | Only with `SEND_LOGS=1` |
+| `document:documents:read`, `document:documents:write` | Only for the dashboard upload |
+
+**`HTTP 403 ... User is missing required permission` although the token has the scope:** a platform token can only
+use permissions its owner also has. Make sure the token owner's IAM policies allow the permission (for example
+`ALLOW openpipeline:metrics:ingest;`), then wait a few minutes for the change to take effect. A token with the right
+scopes and an owner with the right policies works without being recreated.
+
 Required scopes for a classic API token (`dt0c01.`):
 
 | Scope | Required? |

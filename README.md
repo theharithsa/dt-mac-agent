@@ -19,20 +19,24 @@ Current version: see [VERSION](VERSION) · Changes: [CHANGELOG.md](CHANGELOG.md)
 
 ### 1. Create a Dynatrace token
 
-A classic **API token** (`dt0c01.`) is recommended. Create it under *Access tokens* in your environment:
+**Recommended: one platform token (`dt0s16.`) for everything.** It is sent as `Authorization: Bearer <token>`.
+Create it under *Account Management → Identity & access management → Platform tokens* with these scopes:
 
 | Scope | Required? | Used for |
 |---|---|---|
-| `metrics.ingest` (Ingest metrics) | **Required** | Sending metrics |
-| `settings.write` (Write settings) | Recommended | Declaring each metric's name, description, unit and **dimensions** in its metric definition |
-| `logs.ingest` (Ingest logs) | Only with `SEND_LOGS=1` | Sending the agent's own logs |
+| `openpipeline:metrics:ingest` | **Required** | Sending metrics, plus metric name, description and unit |
+| `settings:objects:write` | Recommended | Declaring each metric's dimensions in its metric definition |
+| `openpipeline:logs:ingest` | Only with `SEND_LOGS=1` | Sending the agent's own logs |
+| `document:documents:read`, `document:documents:write` | Only for the dashboard upload | Creating/updating the *MacOS Health Center* dashboard |
 
-A platform token (`dt0s16.`) also works. It needs `openpipeline:metrics:ingest`, plus `settings:objects:write`
-(recommended) and log ingest permission when `SEND_LOGS=1`.
+> A platform token can only use permissions its owner also has. The user who creates the token needs IAM
+> policies that allow the same permissions (for example `ALLOW openpipeline:metrics:ingest;`). Otherwise Dynatrace
+> answers `HTTP 403 ... User is missing required permission` even though the scope is on the token.
+> New IAM grants can take a few minutes to take effect.
 
-**Dashboard upload (optional):** dashboards are stored through the Document API, which only accepts **platform
-tokens** (`dt0s16.`) with `document:documents:write`. If the agent itself uses a platform token, that token is
-used. Otherwise the installer asks for one, uses it once and does not save it.
+Alternative: a classic **API token** (`dt0c01.`, sent as `Api-Token`) with `metrics.ingest`, `settings.write` and
+`logs.ingest`. Classic tokens cannot upload dashboards (Document API), so the installer then asks for a platform
+token just for the upload, uses it once and does not save it.
 
 Without the settings scope, metrics still flow and the agent falls back to sending only name, description and unit.
 In that case dimensions are not listed in the metric definition. If a scope is missing, Dynatrace answers
