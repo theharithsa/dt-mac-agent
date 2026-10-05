@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.5] - 2026-10-05
+
+### Fixed
+
+- Installer and auto-update could hang for minutes at "Downloading" when the network cannot reach one of
+  GitHub's CDN nodes (curl waited about 45s per attempt). All GitHub downloads now use an 8s connect timeout
+  with retries, so they move to a reachable node within seconds. Documented install commands do the same.
+
 ## [0.1.4] - 2026-10-05
 
 ### Added
@@ -99,6 +107,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Log rotation via `newsyslog`.
 - CI (shellcheck + macOS dry-run) and tag-based GitHub release workflow.
 
+[0.1.5]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.1.5
 [0.1.4]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.1.4
 [0.1.3]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.1.3
 [0.1.2]: https://github.com/theharithsa/dt-mac-agent/releases/tag/v0.1.2

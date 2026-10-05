@@ -46,7 +46,7 @@ In that case dimensions are not listed in the metric definition. If a scope is m
 ### 2. Install (one command, needs root)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/theharithsa/dt-mac-agent/main/install.sh | sudo bash
+curl -fsSL --connect-timeout 8 --retry 3 https://raw.githubusercontent.com/theharithsa/dt-mac-agent/main/install.sh | sudo bash
 ```
 
 The installer asks for:
@@ -64,7 +64,7 @@ The installer asks for:
 Unattended example (MDM / scripts):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/theharithsa/dt-mac-agent/main/install.sh \
+curl -fsSL --connect-timeout 8 --retry 3 https://raw.githubusercontent.com/theharithsa/dt-mac-agent/main/install.sh \
   | sudo DT_ENV_URL="https://<env-id>.live.dynatrace.com" DT_TOKEN="<token>" \
          DTMA_PREFIX=/opt/dt-mac-agent DTMA_SEND_LOGS=1 bash
 ```

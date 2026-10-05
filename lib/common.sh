@@ -296,7 +296,7 @@ upload_dashboard() {
 }
 
 latest_version() {
-  curl -fsSL --max-time 20 "https://api.github.com/repos/$DTMA_REPO/releases/latest" 2>/dev/null |
+  curl -fsSL --connect-timeout 8 --retry 4 --retry-delay 1 --retry-all-errors --max-time 60 "https://api.github.com/repos/$DTMA_REPO/releases/latest" 2>/dev/null |
     sed -n 's/.*"tag_name": *"v\{0,1\}\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)".*/\1/p' | head -n 1
 }
 
@@ -311,8 +311,8 @@ run_update() {
   tmp="$(mktemp -d /tmp/dt-mac-agent-update.XXXXXX)"
   base="https://github.com/$DTMA_REPO/releases/download/v$v"
   tarball="dt-mac-agent-$v.tar.gz"
-  if ! curl -fsSL --max-time 120 -o "$tmp/$tarball" "$base/$tarball" ||
-    ! curl -fsSL --max-time 30 -o "$tmp/$tarball.sha256" "$base/$tarball.sha256"; then
+  if ! curl -fsSL --connect-timeout 8 --retry 4 --retry-delay 1 --retry-all-errors --max-time 120 -o "$tmp/$tarball" "$base/$tarball" ||
+    ! curl -fsSL --connect-timeout 8 --retry 4 --retry-delay 1 --retry-all-errors --max-time 60 -o "$tmp/$tarball.sha256" "$base/$tarball.sha256"; then
     log ERROR "update: download of $v failed"
     rm -rf "$tmp"
     return 1

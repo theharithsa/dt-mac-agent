@@ -100,7 +100,7 @@ read -rs "T?Token: "; echo
 # bash
 read -rsp "Token: " T; echo
 
-curl -fsSL https://raw.githubusercontent.com/theharithsa/dt-mac-agent/main/install.sh | sudo DT_TOKEN="$T" bash; unset T
+curl -fsSL --connect-timeout 8 --retry 3 https://raw.githubusercontent.com/theharithsa/dt-mac-agent/main/install.sh | sudo DT_TOKEN="$T" bash; unset T
 ```
 
 **Editing the config by hand**:
@@ -255,6 +255,7 @@ on the next watchdog run.
 | Symptom | Cause / fix |
 |---|---|
 | Looks stuck after entering the sudo password | It is waiting at a prompt. The token prompt hides input; paste the token and press Enter |
+| Stuck at `Downloading dt-mac-agent ...` for minutes (versions before 0.1.5) | Your network cannot reach one of GitHub's download servers (CDN nodes `185.199.108-111.133`), and curl waited about 45s on it each time. 0.1.5+ uses an 8s connect timeout with retries, so it moves to a working node within seconds. Press Ctrl+C and re-run the install command |
 | `no terminal available` / prompts skipped | Running without a TTY (MDM, scripts). Pass `DT_ENV_URL`, `DT_TOKEN` and optionally `DTMA_PREFIX`, `DTMA_SEND_LOGS`, `DTMA_AUTO_UPDATE` as environment variables |
 | `connection test failed; agent NOT started` | URL or token wrong, or a missing scope. The line above it shows the HTTP error |
 | `Dynatrace rejected its first batch` | Same as above, for the running agent. See `dtmacctl logs agent` |
@@ -296,7 +297,7 @@ sudo dtmacctl uninstall              # removes everything, including config and 
 # or keep the config (URL, token, options):
 sudo dtmacctl uninstall --keep-config
 
-curl -fsSL https://raw.githubusercontent.com/theharithsa/dt-mac-agent/main/install.sh | sudo bash
+curl -fsSL --connect-timeout 8 --retry 3 https://raw.githubusercontent.com/theharithsa/dt-mac-agent/main/install.sh | sudo bash
 ```
 
 ---

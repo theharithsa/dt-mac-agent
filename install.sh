@@ -30,6 +30,8 @@ UPDATE="${DTMA_UPDATE:-0}"
 say() { printf '%s [INFO] %s\n' "$(date '+%Y-%m-%d %H:%M:%S %z')" "$*"; }
 warn() { printf '%s [WARN] %s\n' "$(date '+%Y-%m-%d %H:%M:%S %z')" "$*" >&2; }
 die() { printf '%s [ERROR] %s\n' "$(date '+%Y-%m-%d %H:%M:%S %z')" "$*" >&2; exit 1; }
+# Some networks cannot reach every GitHub CDN node; a short connect timeout + retry moves on to a working one.
+fetch() { curl -fsSL --connect-timeout 8 --retry 4 --retry-delay 1 --retry-all-errors --max-time 120 "$@"; }
 
 [ "$(uname -s)" = "Darwin" ] || die "dt-mac-agent supports macOS only"
 [ "$(id -u)" -eq 0 ] || die "run as root: curl -fsSL https://raw.githubusercontent.com/$REPO/main/install.sh | sudo bash"
@@ -59,7 +61,7 @@ fi
 if [ -z "$SRC" ]; then
   VERSION="${DTMA_VERSION:-}"
   if [ -z "$VERSION" ]; then
-    VERSION="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null |
+    VERSION="$(fetch "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null |
       sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1)" || true
     [ -n "$VERSION" ] || die "could not determine the latest release; set DTMA_VERSION"
   fi
@@ -68,8 +70,8 @@ if [ -z "$SRC" ]; then
   base="https://github.com/$REPO/releases/download/v$VERSION"
   tarball="dt-mac-agent-$VERSION.tar.gz"
   say "Downloading dt-mac-agent $VERSION"
-  curl -fsSL -o "$TMP/$tarball" "$base/$tarball" || die "download failed: $base/$tarball"
-  curl -fsSL -o "$TMP/$tarball.sha256" "$base/$tarball.sha256" || die "checksum download failed"
+  fetch -o "$TMP/$tarball" "$base/$tarball" || die "download failed: $base/$tarball"
+  fetch -o "$TMP/$tarball.sha256" "$base/$tarball.sha256" || die "checksum download failed"
   expected="$(awk '{print $1}' "$TMP/$tarball.sha256")"
   actual="$(shasum -a 256 "$TMP/$tarball" | awk '{print $1}')"
   if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then die "SHA-256 mismatch for $tarball"; fi
