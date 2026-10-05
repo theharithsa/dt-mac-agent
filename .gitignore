@@ -3,3 +3,6 @@ dist/
 *.tmp
 config
 !etc/config.example
+
+# Uncropped screenshot (contains tenant/support details)
+Dashboard/mac-agent-dashboard.png

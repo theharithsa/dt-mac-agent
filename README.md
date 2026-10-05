@@ -1,215 +1,199 @@
-# dt-mac-agent
+<div align="center">
 
-Lightweight macOS host monitoring agent that pushes CPU, memory, disk, network, power, process and app metrics
-to **Dynatrace** every minute. Each metric is sent with its display name, description and unit.
+# 🍎 dt-mac-agent
 
-- **Zero dependencies**: pure Bash 3.2 + built-in macOS tools (`top`, `vm_stat`, `sysctl`, `df`, `ioreg`, `netstat`, `ps`, `pmset`, `curl`).
-- **Always on**: runs as a root `launchd` daemon at boot (`KeepAlive`, `ProcessType=Interactive`, `Nice=-5`).
-- **Self-healing**: a separate watchdog daemon restarts the agent if it is unloaded, stopped or hung.
-- **Auto-update**: the watchdog checks GitHub once a day and installs new releases after verifying their SHA-256 checksum.
-- **Resilient**: failed batches are buffered on disk and re-sent for up to 55 minutes.
-- **Observable**: detailed local logs, optionally shipped to Dynatrace Logs.
-- **Tiny footprint**: one ~2 s collection burst per minute, a few MB of RAM.
+**Lightweight macOS monitoring agent for Dynatrace**
 
-Current version: see [VERSION](VERSION) · Changes: [CHANGELOG.md](CHANGELOG.md)
+CPU, memory, disk, network, battery, top processes and running apps, pushed to Dynatrace every minute.<br/>
+Zero dependencies · self-healing · auto-updating · one-line install.
+
+[![Release](https://img.shields.io/github/v/release/theharithsa/dt-mac-agent?label=release&color=1496ff)](https://github.com/theharithsa/dt-mac-agent/releases/latest)
+[![CI](https://github.com/theharithsa/dt-mac-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/theharithsa/dt-mac-agent/actions/workflows/ci.yml)
+[![Release build](https://github.com/theharithsa/dt-mac-agent/actions/workflows/release.yml/badge.svg)](https://github.com/theharithsa/dt-mac-agent/actions/workflows/release.yml)
+[![Tested on](https://img.shields.io/badge/tested%20on-macOS%20(Apple%20Silicon)-success?logo=apple)](#compatibility)
+[![Shell](https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)](#compatibility)
+[![ShellCheck](https://img.shields.io/badge/lint-shellcheck-brightgreen)](.github/workflows/ci.yml)
+[![Dynatrace](https://img.shields.io/badge/Dynatrace-SaaS-1496ff?logo=dynatrace&logoColor=white)](https://www.dynatrace.com)
+[![License](https://img.shields.io/github/license/theharithsa/dt-mac-agent)](LICENSE)
+[![Last commit](https://img.shields.io/github/last-commit/theharithsa/dt-mac-agent)](https://github.com/theharithsa/dt-mac-agent/commits/main)
+
+<img src="Dashboard/macos-health-center-dashboard.png" alt="MacOS Health Center dashboard in Dynatrace" width="900"/>
+
+<sub>The bundled <b>MacOS Health Center</b> dashboard, which the installer can upload for you.</sub>
+
+</div>
 
 ---
 
-## Quick start
+## Contents
 
-### 1. Create a Dynatrace token
+- [Why dt-mac-agent?](#why-dt-mac-agent)
+- [Quick start (3 steps)](#quick-start-3-steps)
+- [What gets collected](#what-gets-collected)
+- [Dashboard](#dashboard)
+- [Everyday commands](#everyday-commands)
+- [How it works](#how-it-works)
+- [Configuration](#configuration)
+- [Logs](#logs)
+- [Auto-update](#auto-update)
+- [Example DQL queries](#example-dql-queries)
+- [Troubleshooting](#troubleshooting)
+- [Uninstall](#uninstall)
+- [Compatibility](#compatibility)
+- [Development and releases](#development-and-releases)
 
-**Recommended: one platform token (`dt0s16.`) for everything.** It is sent as `Authorization: Bearer <token>`.
-Create it under *Account Management → Identity & access management → Platform tokens* with these scopes:
+---
 
-| Scope | Required? | Used for |
-|---|---|---|
-| `openpipeline:metrics:ingest` | **Required** | Sending metrics, plus metric name, description and unit |
-| `settings:objects:write` | Recommended | Declaring each metric's dimensions in its metric definition |
-| `openpipeline:logs:ingest` | Only with `SEND_LOGS=1` | Sending the agent's own logs |
-| `document:documents:read`, `document:documents:write` | Only for the dashboard upload | Creating/updating the *MacOS Health Center* dashboard |
+## Why dt-mac-agent?
 
-> A platform token can only use permissions its owner also has. The user who creates the token needs IAM
-> policies that allow the same permissions (for example `ALLOW openpipeline:metrics:ingest;`). Otherwise Dynatrace
-> answers `HTTP 403 ... User is missing required permission` even though the scope is on the token.
-> New IAM grants can take a few minutes to take effect.
+| | |
+|---|---|
+| 🪶 **Lightweight** | Pure Bash + built-in macOS tools. One ~2 s collection burst per minute, a few MB of RAM, nothing to install. |
+| 🔁 **Always on** | Runs as a root `launchd` daemon from boot, with high scheduling priority. |
+| 🩺 **Self-healing** | A separate watchdog restarts the agent if it stops, crashes or hangs. Each one re-loads the other. |
+| ⬆️ **Auto-updating** | Checks GitHub once a day and installs new releases after verifying their SHA-256 checksum. |
+| 📦 **Resilient** | Failed batches are buffered on disk and re-sent for up to 55 minutes. |
+| 🏷️ **Proper metadata** | Every metric has a display name, description, unit and declared dimensions in Dynatrace. |
+| 🔎 **Observable** | Detailed local logs (also in Console.app), optionally shipped to Dynatrace Logs. |
+| 🔐 **Secure** | Token stored root-only and never shown in `ps` or logs. Downloads are checksum-verified. |
 
-Alternative: a classic **API token** (`dt0c01.`, sent as `Api-Token`) with `metrics.ingest`, `settings.write` and
-`logs.ingest`. Classic tokens cannot upload dashboards (Document API), so the installer then asks for a platform
-token just for the upload, uses it once and does not save it.
+---
 
-Without the settings scope, metrics still flow and the agent falls back to sending only name, description and unit.
-In that case dimensions are not listed in the metric definition. If a scope is missing, Dynatrace answers
-`HTTP 403 ... missing required permission`. The error shows in the installer's connection test and in
-`dtmacctl logs agent` / `dtmacctl logs ingest`.
+## Quick start (3 steps)
 
-### 2. Install (one command, needs root)
+### 1️⃣ Create a Dynatrace token
+
+Use **one platform token** (`dt0s16.…`) for everything. It is sent as `Authorization: Bearer <token>`.<br/>
+Create it in *Account Management → Identity & access management → Platform tokens* with these scopes:
+
+| Scope | Needed for |
+|---|---|
+| `openpipeline:metrics:ingest` | ✅ **Required.** Sending metrics |
+| `settings:objects:write` | ⭐ Recommended. Shows each metric's dimensions in its metric definition |
+| `openpipeline:logs:ingest` | Optional. Only if you send the agent's own logs |
+| `document:documents:read` + `document:documents:write` | Optional. Only for the dashboard upload |
+
+> [!IMPORTANT]
+> A platform token can only use permissions its **owner** also has. If you get
+> `HTTP 403 ... User is missing required permission` even though the scope is on the token, ask your admin to allow it
+> in your IAM policy (e.g. `ALLOW openpipeline:metrics:ingest;`). New grants can take a few minutes to take effect.
+
+<details>
+<summary>Prefer a classic API token (<code>dt0c01.…</code>)?</summary>
+
+Scopes: `metrics.ingest` (required), `settings.write` (recommended), `logs.ingest` (optional).
+Classic tokens can't upload dashboards, so the installer then asks for a platform token just for that upload,
+uses it once and does not store it.
+
+</details>
+
+### 2️⃣ Install
 
 ```bash
 curl -fsSL --connect-timeout 8 --retry 3 https://raw.githubusercontent.com/theharithsa/dt-mac-agent/main/install.sh | sudo bash
 ```
 
-The installer asks for:
+The installer asks a few questions (press Enter to accept the default):
 
-| Prompt | Default | Environment variable (unattended installs) |
-|---|---|---|
-| Install location | `/usr/local/dt-mac-agent` | `DTMA_PREFIX` |
-| Dynatrace environment URL | — | `DT_ENV_URL` |
-| Dynatrace token (hidden input) | — | `DT_TOKEN` |
-| Also send the agent's own logs to Dynatrace? | No | `DTMA_SEND_LOGS=1` |
-| Install new releases automatically (daily check)? | Yes | `DTMA_AUTO_UPDATE=0` to disable |
-| Upload the *MacOS Health Center* dashboard? | Yes on first install, No on upgrades | `DTMA_DASHBOARD=1` |
-| Platform token for the dashboard upload (hidden, used once, **not stored**) | — | `DTMA_DASHBOARD_TOKEN` |
+| Question | Default |
+|---|---|
+| Install location | `/usr/local/dt-mac-agent` |
+| Dynatrace environment URL | e.g. `https://abc12345.live.dynatrace.com` |
+| Dynatrace token (input hidden) | — |
+| Send the agent's own logs to Dynatrace? | No |
+| Install new releases automatically? | Yes |
+| Upload the *MacOS Health Center* dashboard? | Yes (first install) |
 
-Unattended example (MDM / scripts):
+Then it downloads the release, verifies the checksum, tests the token, starts the agent, and waits until Dynatrace
+has accepted the first real batch:
+
+```text
+[INFO] Successfully connected to Dynatrace environment https://abc12345.live.dynatrace.com (first batch: 436 metric lines, HTTP 202)
+[INFO] Log shipping to Dynatrace verified
+[INFO] Dashboard 'MacOS Health Center' created: https://abc12345.apps.dynatrace.com/ui/apps/dynatrace.dashboards/dashboard/dt-mac-agent-health-center
+[INFO] dt-mac-agent 0.1.5 installed and running from /usr/local/dt-mac-agent
+```
+
+<details>
+<summary>Unattended install (MDM, scripts) and all installer options</summary>
+
+Every question can be answered with an environment variable:
+
+| Variable | Meaning |
+|---|---|
+| `DT_ENV_URL` | Environment URL (`.live.` or `.apps.` both work) |
+| `DT_TOKEN` | Dynatrace token |
+| `DTMA_PREFIX` | Install location |
+| `DTMA_SEND_LOGS=1` | Send the agent's logs to Dynatrace |
+| `DTMA_AUTO_UPDATE=0` | Disable automatic updates |
+| `DTMA_DASHBOARD=1` | Upload the dashboard |
+| `DTMA_DASHBOARD_TOKEN` | Platform token for the dashboard upload when `DT_TOKEN` is a classic token (not stored) |
+| `DTMA_VERSION` | Install a specific version, e.g. `0.1.5` |
+| `DTMA_SKIP_TEST=1` | Skip the connection test |
 
 ```bash
 curl -fsSL --connect-timeout 8 --retry 3 https://raw.githubusercontent.com/theharithsa/dt-mac-agent/main/install.sh \
   | sudo DT_ENV_URL="https://<env-id>.live.dynatrace.com" DT_TOKEN="<token>" \
-         DTMA_PREFIX=/opt/dt-mac-agent DTMA_SEND_LOGS=1 bash
+         DTMA_PREFIX=/opt/dt-mac-agent DTMA_SEND_LOGS=1 DTMA_DASHBOARD=1 bash
 ```
 
-The installer:
+To keep the token out of your shell history, read it into a variable first:
+`read -rs "T?Token: "; echo` (zsh), then pass `DT_TOKEN="$T"` and run `unset T` afterwards.
 
-1. Downloads the latest GitHub release and verifies its SHA-256 checksum.
-2. Installs to the chosen location and links `dtmacctl` into `/usr/local/bin`.
-3. Writes `/etc/dt-mac-agent/config` (`root:wheel`, mode `600`).
-4. Sends a test metric. **If Dynatrace rejects it, the agent is not started.**
-5. Loads the agent and watchdog `launchd` daemons.
-6. Waits for the agent's first real metric batch and reports `Successfully connected to Dynatrace environment <url>`
-   (and verifies log shipping when enabled) before printing the final success message.
+**Install location rules:** the agent runs as root, so the directory must be dedicated, and every parent directory
+must be owned by root. Paths under `/Users`, `/tmp`, `/var` and system folders are refused.
 
-The install location must be a dedicated directory and every parent directory must be owned by root
-(the program runs as root). Paths under `/Users`, `/tmp`, `/var` and system folders are refused.
+**Re-running the installer** upgrades in place and keeps your settings. Pass `DT_TOKEN` to change the token or
+`DTMA_PREFIX` to move the installation.
 
-Re-running the installer upgrades in place and keeps your settings. Pass `DT_TOKEN` again to rotate the token, or
-`DTMA_PREFIX` to move the installation. Pin a version with `DTMA_VERSION=0.1.0`.
+</details>
 
-### 3. Verify
+### 3️⃣ Check it's running
 
 ```bash
 sudo dtmacctl status
 ```
 
 ```text
-dt-mac-agent 0.1.0
+dt-mac-agent 0.1.5
   agent     : loaded, state=running, pid=812, last exit=(never exited)
-  watchdog  : loaded, state=not running, pid=, last exit=0
+  watchdog  : loaded, state=not running, pid=, last exit=0     ← normal: runs briefly every 60 s
   heartbeat : 14s ago
   last send : 2026-10-05 10:31:00 (436 lines, ok 202)
   spool     : 0 buffered batches
   restarts  : 0 (by watchdog)
   log ship  : enabled, last result ok
   auto-upd. : enabled, last check 2026-10-05 10:20
-  endpoint  : https://<env-id>.live.dynatrace.com/api/v2/metrics/ingest
+  endpoint  : https://<env-id>.apps.dynatrace.com/platform/classic/environment-api/v2/metrics/ingest
   home      : /usr/local/dt-mac-agent
   logs      : /Library/Logs/dt-mac-agent
 ```
 
-The watchdog shows `not running` between its 60-second runs. That is expected.
+That's it. Open the dashboard, or query `macos.*` metrics in a Notebook.
 
 ---
 
-## Commands
+## What gets collected
 
-| Command | Description |
-|---|---|
-| `sudo dtmacctl status` | Agent/watchdog state, heartbeat, last ingest, log shipping, auto-update |
-| `sudo dtmacctl start` / `stop` | Start / stop agent + watchdog (`stop` survives reboots until `start`) |
-| `sudo dtmacctl restart` | Restart the agent |
-| `sudo dtmacctl update [--check]` | Install the latest release now (`--check` only reports) |
-| `sudo dtmacctl dashboard` | Upload or refresh the *MacOS Health Center* dashboard (asks for a platform token if needed) |
-| `dtmacctl logs [agent\|ingest\|watchdog\|install] [-f]` | Show / follow logs (default: all) |
-| `dtmacctl payload` | Print the last metric batch sent to Dynatrace |
-| `dtmacctl metrics` | List all metrics with type, unit and description |
-| `dtmacctl test` | Collect once and print the metric lines, nothing is sent |
-| `sudo dtmacctl send-test` | Send one test metric to validate URL + token |
-| `sudo dtmacctl config` | Print config with the token masked |
-| `sudo dtmacctl uninstall [--keep-config]` | Remove everything |
+About 80 metrics, every minute, all prefixed `macos.`:
 
----
+| Area | Highlights | Split by |
+|---|---|---|
+| 🧠 **CPU** | usage, user / system / idle, load 1-5-15 min, cores, thermal throttling | host |
+| 💾 **Memory** | used, app, wired, compressed, cached, free, pressure level, swap, page-ins/outs | host |
+| 🗄️ **Disk** | capacity, used, free, usage %, inodes, read/write bytes, ops, latency, errors | mount, device |
+| 🌐 **Network** | bytes / packets / errors in & out, established TCP connections | interface |
+| 🔋 **Power** | on AC, battery %, charging, cycle count, health, temperature | host |
+| ⚙️ **Top processes** | CPU, memory, memory %, threads, instances. Top 10 by CPU + top 10 by memory | process, owner, app |
+| 🪟 **Running apps** | CPU, memory, memory %, threads, processes. Helper processes summed per app | app, bundle ID, user/system |
+| 🖥️ **System** | processes, threads, uptime, logged-in sessions, open files | host |
+| 🩺 **Agent health** | heartbeat, collection time, buffered batches, ingest failures, watchdog restarts | host, version |
 
-## Architecture
+Every metric also carries `host.name`, `host.arch`, `host.model`, `os.type` and `os.version`.
+Run `dtmacctl metrics` to list them all locally.
 
-```mermaid
-flowchart LR
-    subgraph launchd [launchd - system domain, starts at boot]
-        A[dt-mac-agent<br/>KeepAlive, Interactive, nice -5]
-        W[dt-mac-watchdog<br/>every 60s]
-    end
-    A -- every 60s --> C[collectors]
-    C --> F[format.awk<br/>line protocol + counter deltas]
-    F --> S{metrics ingest}
-    S -- fail --> SP[(spool<br/>max 55 min)]
-    SP -- retry --> S
-    S --> DT[(Dynatrace)]
-    A -- daily --> M[metric metadata<br/>name, description, unit] --> DT
-    A -- SEND_LOGS=1 --> L[logs ingest] --> DT
-    A -- writes --> HB[(heartbeat)]
-    W -- checks --> HB
-    W -- kickstart / bootstrap --> A
-    A -- re-loads if missing --> W
-    W -- daily --> GH[GitHub releases] -- newer + checksum ok --> I[install.sh update mode]
-```
-
-- **Agent**: collects, formats and sends one batch per interval (aligned to the minute), then writes a heartbeat.
-  launchd restarts it immediately if it exits.
-- **Watchdog**: separate launchd job. Restarts the agent if the job is unloaded, not running, or the heartbeat is
-  older than 3× the interval. Once a day it checks GitHub for a newer release (see [Auto-update](#auto-update)).
-- **Security**: the token is stored only in `/etc/dt-mac-agent/config` (root-only). It is passed to `curl` via stdin,
-  so it never appears in `ps` output or in logs.
-
-### Files
-
-| Path | Purpose |
-|---|---|
-| `<install location>/` (default `/usr/local/dt-mac-agent`) | Program files |
-| `/etc/dt-mac-agent/config` | Configuration (see [etc/config.example](etc/config.example)) |
-| `/var/lib/dt-mac-agent/` | Heartbeat, counter state, spool, log-shipping offsets |
-| `/Library/Logs/dt-mac-agent/` | Logs, see [Logs](#logs) |
-| `/Library/LaunchDaemons/com.theharithsa.dt-mac-agent*.plist` | launchd jobs |
-
----
-
-## Metrics
-
-All metric keys start with `macos.` (configurable via `METRIC_PREFIX`). Each metric's display name, description,
-unit and dimensions are declared in Dynatrace (Settings schema `builtin:metric.metadata`, tagged `dt-mac-agent`) at
-start-up, after every upgrade and once a day. Metrics ending in `.count` are counters sent as per-interval deltas.
-Use `rate:` in DQL to get per-second values. Dimension display names come from [lib/dimensions.tsv](lib/dimensions.tsv).
-
-### Dimensions
-
-Every metric carries the host dimensions:
-
-| Dimension | Example |
-|---|---|
-| `host.name` | `Machy` |
-| `host.arch` | `arm64` |
-| `host.model` | `Mac14,12` |
-| `os.type` | `macos` |
-| `os.version` | `27.0.1` |
-
-Additional dimensions per group:
-
-| Metrics | Dimensions |
-|---|---|
-| `macos.disk.*` (usage) | `disk.mount`, `disk.device` |
-| `macos.disk.io.*` | `disk.device` |
-| `macos.net.*` (except `tcp.established`) | `network.interface` |
-| `macos.process.*` | `process.executable.name`, `process.owner`, `app.name`, `process.executable.path` |
-| `macos.app.*` | `app.name`, `app.bundle.id`, `app.type` (`user` \| `system`) |
-| `macos.agent.heartbeat` | `agent.version` |
-
-**Processes** are grouped by executable name and owner. For example, all `Code Helper (Renderer)` instances form one
-stable series, and `process.instances` tells you how many PIDs there are. Each minute the agent reports the union of
-the top 10 process groups by CPU and the top 10 by memory (`TOP_N`). Rank them in DQL with `sort ... desc`, as in
-the examples below.
-
-**Apps**: every running `.app` bundle is reported. All of an app's helper processes are summed under the outermost
-bundle, so Chrome, Teams, VS Code and similar apps report their full footprint.
-
-### Reference
+<details>
+<summary><b>Full metric reference</b> (key, unit, name, description)</summary>
 
 | Metric | Unit | Name | Description |
 |---|---|---|---|
@@ -294,190 +278,320 @@ bundle, so Chrome, Teams, VS Code and similar apps report their full footprint.
 | `macos.agent.ingest.failures.count` | Count | Agent ingest failures | Failed metric ingest requests during the interval. |
 | `macos.agent.watchdog.restarts.count` | Count | Agent watchdog restarts | Agent restarts triggered by the watchdog during the interval. |
 
-The source of truth is [lib/metrics.tsv](lib/metrics.tsv). CI fails if the agent emits a metric that is missing there.
+Source of truth: [lib/metrics.tsv](lib/metrics.tsv) (metrics) and [lib/dimensions.tsv](lib/dimensions.tsv)
+(dimension display names). CI fails if the agent emits a metric that isn't in the catalog.
+
+</details>
+
+<details>
+<summary><b>Dimensions</b> per metric group</summary>
+
+| Metrics | Dimensions |
+|---|---|
+| all | `host.name`, `host.arch`, `host.model`, `os.type`, `os.version` |
+| `macos.disk.*` (usage) | `disk.mount`, `disk.device` |
+| `macos.disk.io.*` | `disk.device` |
+| `macos.net.*` (except `tcp.established`) | `network.interface` |
+| `macos.process.*` | `process.executable.name`, `process.owner`, `app.name`, `process.executable.path` |
+| `macos.app.*` | `app.name`, `app.bundle.id`, `app.type` (`user` \| `system`) |
+| `macos.agent.heartbeat` | `agent.version` |
+
+- **Processes** are grouped by executable name and owner, so all `Code Helper (Renderer)` instances form one
+  stable series. `process.instances` gives the number of PIDs.
+- **Apps** sum all helper processes under the outermost `.app` bundle, so Chrome, Teams, VS Code and similar
+  apps report their full footprint.
+- Metrics ending in `.count` are per-minute deltas. Use `rate: 1s` in DQL for per-second values.
+- `process.cpu` / `app.cpu` are % of **one** core, so they can exceed 100.
+
+</details>
 
 ---
 
 ## Dashboard
 
-[Dashboard/MacOS Health Center.json](Dashboard/MacOS%20Health%20Center.json) is a ready-made Dynatrace dashboard.
-It covers CPU, memory, swap and disk per Mac, with a *Mac / Computer Name* filter.
+<img src="Dashboard/macos-health-center-dashboard.png" alt="MacOS Health Center dashboard" width="800"/>
 
-- **During installation**: answer *Yes* to the dashboard prompt (or set `DTMA_DASHBOARD=1` and
-  `DTMA_DASHBOARD_TOKEN=<platform token>`). The installer prints the dashboard link.
-- **Later**: `sudo dtmacctl dashboard`.
-- The dashboard always gets the same ID (`dt-mac-agent-health-center`) and is shared with the environment.
-  Uploading again updates it in place instead of creating a copy, and **overwrites edits made in Dynatrace**.
-  Save a copy (*Duplicate*) before customizing.
-- Link: `https://<env-id>.apps.dynatrace.com/ui/apps/dynatrace.dashboards/dashboard/dt-mac-agent-health-center`
-- Manual alternative: in Dynatrace *Dashboards* → *Upload*, then select the JSON file.
+[Dashboard/MacOS Health Center.json](Dashboard/MacOS%20Health%20Center.json) shows CPU, memory, swap and disk
+for each Mac, with a *Mac / Computer Name* filter.
+
+| How | Command |
+|---|---|
+| During installation | Answer **Yes** to the dashboard question (or `DTMA_DASHBOARD=1`) |
+| Any time later | `sudo dtmacctl dashboard` |
+| Manually | Dynatrace *Dashboards → Upload* → select the JSON file |
+
+The dashboard always gets the same ID (`dt-mac-agent-health-center`) and is shared with your environment:
+`https://<env-id>.apps.dynatrace.com/ui/apps/dynatrace.dashboards/dashboard/dt-mac-agent-health-center`
+
+> [!TIP]
+> Uploading again updates the dashboard in place and **overwrites edits made in Dynatrace**.
+> Use *Duplicate* in Dynatrace before customizing it.
 
 ---
 
-## Example DQL
+## Everyday commands
+
+| Command | What it does |
+|---|---|
+| `sudo dtmacctl status` | Health overview: agent, watchdog, heartbeat, last send, log shipping, auto-update |
+| `dtmacctl logs [agent\|ingest\|watchdog\|install] [-f]` | Show or follow logs |
+| `sudo dtmacctl restart` | Restart the agent |
+| `sudo dtmacctl stop` / `start` | Stop / start (a stop survives reboots until `start`) |
+| `sudo dtmacctl update [--check]` | Install the latest release now (or just check) |
+| `sudo dtmacctl dashboard` | Upload or refresh the dashboard |
+| `sudo dtmacctl send-test` | Send one test metric to check URL + token |
+| `dtmacctl test` | Collect once and print the metric lines, nothing sent |
+| `dtmacctl payload` | Show the last batch exactly as sent |
+| `dtmacctl metrics` | List all metrics with unit and description |
+| `sudo dtmacctl config` | Show the configuration (token masked) |
+| `sudo dtmacctl uninstall [--keep-config]` | Remove everything |
+
+---
+
+## How it works
+
+```mermaid
+flowchart LR
+    subgraph mac [Your Mac - launchd, starts at boot]
+        A[dt-mac-agent<br/>every 60 s]
+        W[watchdog<br/>every 60 s]
+    end
+    A --> C[collect<br/>top · vm_stat · sysctl · df<br/>ioreg · netstat · ps · pmset]
+    C --> S{send}
+    S -- ok --> DT[(Dynatrace)]
+    S -- failed --> SP[(spool<br/>retry ≤ 55 min)] --> S
+    A -- metric names, units, dimensions --> DT
+    A -- agent logs, optional --> DT
+    W -- restart if stopped or hung --> A
+    A -- re-load if missing --> W
+    W -- daily --> GH[GitHub releases] -- verified update --> A
+```
+
+1. **Agent:** every minute it collects metrics, sends one batch to Dynatrace and writes a heartbeat.
+   launchd restarts it immediately if it exits.
+2. **Watchdog:** a separate job that runs every minute. It restarts the agent if it's not loaded, not running, or its
+   heartbeat is older than 3 minutes (hung). Once a day it checks for updates.
+3. **Metadata:** at start-up, after upgrades and daily, the agent declares each metric's name, description, unit and
+   dimensions in Dynatrace (Settings API, `builtin:metric.metadata`).
+4. **Security:** the token lives only in `/etc/dt-mac-agent/config` (root-only, mode 600). It is passed to `curl` via
+   stdin, so it never appears in `ps` output or logs.
+
+<details>
+<summary>Files on disk</summary>
+
+| Path | Purpose |
+|---|---|
+| `<install location>/` (default `/usr/local/dt-mac-agent`) | Program files and dashboard |
+| `/etc/dt-mac-agent/config` | Configuration (see [etc/config.example](etc/config.example)) |
+| `/var/lib/dt-mac-agent/` | Heartbeat, counter state, spool, log-shipping offsets |
+| `/Library/Logs/dt-mac-agent/` | Logs |
+| `/Library/LaunchDaemons/com.theharithsa.dt-mac-agent*.plist` | launchd jobs |
+| `/usr/local/bin/dtmacctl` | CLI (symlink) |
+
+</details>
+
+---
+
+## Configuration
+
+Edit `/etc/dt-mac-agent/config` with `sudo`, then run `sudo dtmacctl restart`.
+
+| Key | Default | Description |
+|---|---|---|
+| `DT_ENV_URL` | — | `https://<env-id>.live.dynatrace.com` (`.apps.` works too) |
+| `DT_TOKEN` | — | Platform (`dt0s16.`) or API (`dt0c01.`) token |
+| `SEND_LOGS` | `0` | `1` = ship the agent's own logs to Dynatrace |
+| `AUTO_UPDATE` | `1` | `1` = install new releases automatically (daily check) |
+| `METRIC_PREFIX` | `macos` | Metric key prefix |
+| `TOP_N` | `10` | Process groups reported per ranking (CPU and memory) |
+| `INTERVAL` | `60` | Collection interval in seconds (min 10) |
+| `SPOOL_MAX_AGE_MIN` | `55` | Retry window for failed batches (Dynatrace rejects data > 1 h old) |
+| `SPOOL_MAX_FILES` | `120` | Max buffered batches |
+| `LOG_PAYLOADS` | `0` | `1` = keep every full batch in `payloads.log` |
+| `DT_INGEST_URL` / `DT_LOGS_URL` / `DT_SETTINGS_URL` | auto | Endpoint overrides (Managed / ActiveGate) |
+
+The endpoint is chosen from the token type: platform tokens use
+`https://<env-id>.apps.dynatrace.com/platform/classic/environment-api/v2/...` (Bearer), and API tokens use
+`https://<env-id>.live.dynatrace.com/api/v2/...` (Api-Token).
+
+---
+
+## Logs
+
+Logs are written to `/Library/Logs/dt-mac-agent/`. They also show up in **Console.app → Log Reports**, are
+rotated automatically, and never contain the token (readable without `sudo`).
+
+| File | What's in it |
+|---|---|
+| `ingest.log` | One line per batch: lines, size, HTTP result, accepted/invalid, timings, buffered batches |
+| `agent.log` | Start/stop, warnings and errors |
+| `watchdog.log` | Every watchdog check, restarts and update checks |
+| `install.log` | Full installer and auto-update output |
+| `last-payload.txt` | The last batch exactly as sent |
+
+Example `ingest.log` line:
+
+```text
+2026-10-05 10:31:02 +0530 [INFO] batch 497 lines (113255 B): ok 202, accepted=497 invalid=0, collect=2s send=0s, spool=0 | agent=5 app=300 cpu=9 disk=19 memory=19 net=55 process=80 ...
+```
+
+With `SEND_LOGS=1`, these logs are also sent to Dynatrace, tagged `service.name=dt-mac-agent` with the original
+timestamps and log levels:
 
 ```sql
-// CPU and memory per Mac
+fetch logs | filter service.name == "dt-mac-agent" | sort timestamp desc
+```
+
+---
+
+## Auto-update
+
+With `AUTO_UPDATE=1` (default), the watchdog checks
+[GitHub releases](https://github.com/theharithsa/dt-mac-agent/releases) once a day. When there's a newer version, it
+downloads it, **verifies the SHA-256 checksum** (nothing is installed on a mismatch), and installs it in place while
+keeping your settings. Details go to `watchdog.log` and `install.log`.
+
+```bash
+sudo dtmacctl update --check   # is there a newer version?
+sudo dtmacctl update           # install it now
+```
+
+> [!NOTE]
+> Versions before 0.1.0 have no auto-update. Re-run the install command once to upgrade them.
+
+---
+
+## Example DQL queries
+
+<details open>
+<summary>CPU and memory per Mac</summary>
+
+```sql
 timeseries cpu = avg(macos.cpu.usage), mem = avg(macos.memory.usage), by: { host.name }
 ```
 
+</details>
+
+<details>
+<summary>Top 10 processes by CPU</summary>
+
 ```sql
-// Top 10 processes by CPU
 timeseries cpu = avg(macos.process.cpu), by: { host.name, process.executable.name, app.name }
 | fieldsAdd avg_cpu = arrayAvg(cpu)
 | sort avg_cpu desc
 | limit 10
 ```
 
+</details>
+
+<details>
+<summary>Top 10 processes by memory</summary>
+
 ```sql
-// Top 10 processes by memory
 timeseries mem = avg(macos.process.memory.rss), by: { host.name, process.executable.name, process.owner }
 | fieldsAdd avg_mem = arrayAvg(mem)
 | sort avg_mem desc
 | limit 10
 ```
 
+</details>
+
+<details>
+<summary>Heaviest apps</summary>
+
 ```sql
-// Heaviest apps by CPU and memory
 timeseries cpu = avg(macos.app.cpu), mem = avg(macos.app.memory.rss), by: { host.name, app.name, app.bundle.id }
 | fieldsAdd avg_cpu = arrayAvg(cpu), avg_mem = arrayAvg(mem)
 | sort avg_mem desc
 | limit 10
 ```
 
+</details>
+
+<details>
+<summary>Network throughput (bytes/s) per interface</summary>
+
 ```sql
-// Network throughput (bytes/s) per interface
 timeseries rx = sum(macos.net.bytes.in.count, rate: 1s), tx = sum(macos.net.bytes.out.count, rate: 1s),
   by: { host.name, network.interface }
 ```
 
+</details>
+
+<details>
+<summary>Disk read latency (ms)</summary>
+
 ```sql
-// Disk read latency (ms) per disk
 timeseries t = sum(macos.disk.io.read.time.count), ops = sum(macos.disk.io.read.ops.count), by: { host.name, disk.device }
 | fieldsAdd latency_ms = t[] / ops[] / 1000000
 ```
 
-```sql
-// Agent logs (SEND_LOGS=1)
-fetch logs
-| filter service.name == "dt-mac-agent"
-| fields timestamp, host.name, dt_mac_agent.component, loglevel, content
-| sort timestamp desc
-```
-
----
-
-## Logs
-
-All logs are written to `/Library/Logs/dt-mac-agent/`, appear in **Console.app** under *Log Reports*, and are rotated
-by `newsyslog`. Runtime logs never contain the token, so you can read them without `sudo`.
-
-| File | Contents |
-|---|---|
-| `ingest.log` | One line per batch: lines, bytes, HTTP result, accepted/invalid, timings, spool size, per-category breakdown; metadata sends |
-| `last-payload.txt` | The most recent batch exactly as sent (`dtmacctl payload`) |
-| `payloads.log` | Every full batch, only when `LOG_PAYLOADS=1` |
-| `agent.log` | Agent lifecycle, warnings and errors (start/stop, ingest failures, collector errors, log shipping status) |
-| `watchdog.log` | Result of every watchdog check (each minute), restarts and update checks |
-| `install.log` | Full installer output, including automatic updates (readable by admin users) |
-| `*.stdout.log` / `*.stderr.log` | Raw process output captured by launchd (normally empty) |
-
-### Shipping logs to Dynatrace
-
-With `SEND_LOGS=1` (installer prompt or `DTMA_SEND_LOGS=1`), the agent sends new lines from `agent.log`,
-`ingest.log`, `watchdog.log` and `install.log` to the Dynatrace log ingest API every minute. Each record carries
-`service.name=dt-mac-agent`, `dt_mac_agent.component`, `log.source`, `host.name`, `os.type`, `os.version` and
-`agent.version`, with the original timestamp and log level. Read positions survive restarts and log rotation.
-If sending fails, the lines are retried on the next cycle.
-
----
-
-## Auto-update
-
-With `AUTO_UPDATE=1` (the default), the watchdog checks
-[GitHub releases](https://github.com/theharithsa/dt-mac-agent/releases) once every 24 hours. When a newer version
-exists, it:
-
-1. Downloads the release archive and its `.sha256` file and verifies the checksum. On a mismatch, nothing is installed.
-2. Runs the release's `install.sh` in update mode. This keeps your install location and settings, replaces the
-   program files and restarts the agent.
-3. Writes everything to `watchdog.log` and `install.log`.
-
-Update manually with `sudo dtmacctl update`, or check without installing using `sudo dtmacctl update --check`.
-Disable automatic updates with `AUTO_UPDATE=0` in the config.
-
-> Versions before 0.1.0 have no auto-update. Upgrade them once by re-running the install command.
-
----
-
-## Configuration
-
-Edit `/etc/dt-mac-agent/config`, then run `sudo dtmacctl restart`.
-
-| Key | Default | Description |
-|---|---|---|
-| `DT_ENV_URL` | — | `https://<env-id>.live.dynatrace.com` (`.apps.` is accepted too) |
-| `DT_TOKEN` | — | Platform (`dt0s16.`) or API (`dt0c01.`) token |
-| `SEND_LOGS` | `0` | `1` = ship the agent's logs to Dynatrace |
-| `AUTO_UPDATE` | `1` | `1` = install new releases automatically (daily check) |
-| `METRIC_PREFIX` | `macos` | Metric key prefix |
-| `TOP_N` | `10` | Process groups per ranking (CPU and memory) |
-| `INTERVAL` | `60` | Collection interval in seconds (min 10) |
-| `SPOOL_MAX_AGE_MIN` | `55` | Retry window for failed batches (Dynatrace rejects data > 1 h old) |
-| `SPOOL_MAX_FILES` | `120` | Max buffered batches |
-| `LOG_PAYLOADS` | `0` | `1` = append every full batch to `payloads.log` |
-| `DT_INGEST_URL` / `DT_LOGS_URL` | auto | Full endpoint overrides (Managed / ActiveGate) |
-
-Endpoints are derived from `DT_ENV_URL` and the token type:
-
-| Token | Metrics / logs / settings endpoint |
-|---|---|
-| API token `dt0c01.` | `https://<env-id>.live.dynatrace.com/api/v2/{metrics/ingest,logs/ingest,settings/objects}` |
-| Platform token `dt0s16.` | `https://<env-id>.apps.dynatrace.com/platform/classic/environment-api/v2/{...}` |
-
-`DT_ENV_URL` can be given with `.live.` or `.apps.`; the agent picks the right host for the token type.
+</details>
 
 ---
 
 ## Troubleshooting
 
-See **[troubleshooting.md](troubleshooting.md)** for the full guide: health check, token scopes and rotation,
-connectivity and proxies, missing dimensions, spool, log shipping, auto-update, installer issues and diagnostics.
+📖 **Full guide: [troubleshooting.md](troubleshooting.md)**
 
-| Symptom | Fix |
+| Symptom | Quick fix |
 |---|---|
-| `HTTP 401` | Token invalid or expired. See [Updating or rotating the token](troubleshooting.md#updating-or-rotating-the-token) |
-| `HTTP 403 ... missing required permission` | Add the named scope to the token (see the token table) |
-| Need to add a scope or change the token | `update` keeps the token. See [Updating or rotating the token](troubleshooting.md#updating-or-rotating-the-token) |
-| `HTTP 400` | Some lines were rejected. Details are in `dtmacctl logs ingest` |
-| No data after install | `sudo dtmacctl status`, then `sudo dtmacctl send-test` |
-| Agent keeps restarting | `dtmacctl logs agent` and `/Library/Logs/dt-mac-agent/agent.stderr.log` |
-| Update did not install | `dtmacctl logs watchdog` and `dtmacctl logs install` |
+| `HTTP 401` | Token wrong or expired. See [Updating or rotating the token](troubleshooting.md#updating-or-rotating-the-token) |
+| `HTTP 403 ... missing required permission` | Add the scope to the token, **and** make sure your user's IAM policy allows it |
+| Need to change or extend the token | `update` keeps the token. See [Updating or rotating the token](troubleshooting.md#updating-or-rotating-the-token) |
+| Installer stuck at "Downloading" | Fixed in 0.1.5. Press Ctrl+C and re-run the install command |
+| No data in Dynatrace | `sudo dtmacctl status`, then `sudo dtmacctl send-test` |
+| Dimensions missing in the metric definition | Token needs `settings:objects:write` |
+| Agent keeps restarting | `dtmacctl logs agent` and `dtmacctl logs watchdog` |
+
+---
 
 ## Uninstall
 
 ```bash
-sudo dtmacctl uninstall
-# or
-curl -fsSL https://raw.githubusercontent.com/theharithsa/dt-mac-agent/main/uninstall.sh | sudo bash
+sudo dtmacctl uninstall                # remove everything
+sudo dtmacctl uninstall --keep-config  # keep URL, token and options for a later reinstall
 ```
 
-## Development
+The uploaded dashboard and the data already in Dynatrace are not touched.
+
+---
+
+## Compatibility
+
+| | |
+|---|---|
+| macOS | Tested on macOS 27 (Apple Silicon). CI runs on GitHub's `macos-latest` runner on every push |
+| CPU | Apple Silicon (tested). Intel is supported but not yet tested on hardware; it adds thermal speed-limit metrics |
+| Shell | macOS built-in `/bin/bash` 3.2. No Homebrew, Python or extra packages |
+| Dynatrace | SaaS (`*.live.dynatrace.com` / `*.apps.dynatrace.com`). Managed / ActiveGate via endpoint overrides |
+
+---
+
+## Development and releases
 
 ```bash
-bash bin/dt-mac-agent --dry-run        # collect once and print lines, no root needed
-bash bin/dtmacctl metrics              # metric catalog
-sudo ./install.sh                      # install from the local checkout
+bash bin/dt-mac-agent --dry-run   # collect once and print lines (no root, nothing sent)
+bash bin/dtmacctl metrics         # metric catalog
+sudo ./install.sh                 # install from the local checkout
 ```
 
-### Versioning and releases
+Every push runs [CI](.github/workflows/ci.yml):
+- **Lint:** ShellCheck on every script.
+- **Dry run:** a collection run on a macOS runner.
+- **Catalog check:** fails if any emitted metric is missing from [lib/metrics.tsv](lib/metrics.tsv).
 
-The project follows [Semantic Versioning](https://semver.org). The version lives in [VERSION](VERSION).
-To release: bump `VERSION`, add a section to [CHANGELOG.md](CHANGELOG.md), commit, then push a tag such as
-`git tag v0.1.1 && git push origin v0.1.1`. CI lints the scripts, verifies the metric catalog, builds
-`dt-mac-agent-<version>.tar.gz` plus its `.sha256`, and publishes the GitHub release. Installed agents with
-auto-update enabled pick it up within 24 hours.
+**Releasing** ([Semantic Versioning](https://semver.org)):
+1. Bump [VERSION](VERSION) and add a section to [CHANGELOG.md](CHANGELOG.md).
+2. Commit and push a tag: `git tag v0.1.6 && git push origin v0.1.6`.
+3. The [release workflow](.github/workflows/release.yml) builds `dt-mac-agent-<version>.tar.gz` plus its `.sha256`
+   and publishes the GitHub release.
+4. Installed agents pick it up within 24 hours.
 
-## License
+---
 
-[MIT](LICENSE)
+<div align="center">
+
+[MIT License](LICENSE) · [Changelog](CHANGELOG.md) · [Troubleshooting](troubleshooting.md) · [Releases](https://github.com/theharithsa/dt-mac-agent/releases)
+
+</div>
